@@ -1,0 +1,12 @@
+<launch>
+    <!-- Launch the robot_controller_node -->
+    <node name="robot_controller_node" pkg="robot_controller" type="robot_controller_node" output="screen">
+        <!-- You can add parameters here if needed -->
+        <!-- Example: <param name="robot_name" value="jackal" /> -->
+    </node>
+
+    <!-- Optional: Set up ROS logging -->
+    <param name="use_sim_time" value="true"/>
+
+    <!-- Optional: Add any other nodes or configurations needed for your robot -->
+</launch>
