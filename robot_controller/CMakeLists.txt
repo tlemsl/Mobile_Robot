@@ -88,7 +88,7 @@ link_directories(${LIBRARY_DIRS})
 
   
 ## Declare a C++ executable
-add_executable(robot_controller_node src/MPC_control.cpp)
+add_executable(robot_controller_node src/MPCController.cpp)
 
 ## Specify libraries to link a library or executable target against
 target_link_libraries(robot_controller_node

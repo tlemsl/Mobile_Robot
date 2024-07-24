@@ -10,18 +10,28 @@
 
 using namespace casadi;
 
-class SimplePoseController {
+class MPCController {
 public:
-    SimplePoseController() {
+    MPCController() {
         // Initialize the ROS node
         ros::NodeHandle nh;
         
         ros::AsyncSpinner spinner(4);
-        // Subscriber to Gazebo model states
-        pose_sub_ = nh.subscribe("/gazebo/model_states", 10, &SimplePoseController::poseCallback, this);
         
+        // Get the use_sim parameter
+        ros::NodeHandle pnh("~");
+        bool use_sim;
+        pnh.param("use_sim", use_sim, true);
+
+        // Conditional subscription based on use_sim
+        if (use_sim) {
+            pose_sub_ = nh.subscribe("/gazebo/model_states", 10, &MPCController::poseCallbackSim, this);
+        } else {
+            pose_sub_ = nh.subscribe("/robot_pose", 10, &MPCController::poseCallbackReal, this);
+        }
+
         // Subscriber to the goal pose
-        goal_sub_ = nh.subscribe("/move_base_simple/goal", 10, &SimplePoseController::goalCallback, this);
+        goal_sub_ = nh.subscribe("/move_base_simple/goal", 10, &MPCController::goalCallback, this);
         spinner.start();
 
         // Publisher to the robot's velocity command
@@ -38,14 +48,19 @@ public:
         goal_pose_ = boost::none;
         
         // Get the robot name from parameters or use default
-        ros::NodeHandle pnh("~");
         pnh.param<std::string>("robot_name", robot_name_, "jackal");
 
         // MPC parameters
-        dt_ = 0.5;
-        N_ = 20;  // Prediction horizon
-        Q_ = DM::diag(DM({10, 10, 1}));  // State weighting matrix
-        R_ = DM::diag(DM({0.1, 0.1}));  // Control weighting matrix
+        pnh.param("dt", dt_, 0.5);
+        pnh.param("N", N_, 20);
+        
+        std::vector<double> Q_vec = {10, 10, 1};
+        pnh.getParam("Q", Q_vec);
+        Q_ = DM::diag(DM(Q_vec));
+
+        std::vector<double> R_vec = {0.1, 0.1};
+        pnh.getParam("R", R_vec);
+        R_ = DM::diag(DM(R_vec));
 
         // Define the state and control variables
         x_ = MX::sym("x");
@@ -61,16 +76,24 @@ public:
         dynamics_ = Function("dynamics", {state_, control_}, {state_dot_});
 
         // Define the state and control boundaries
-        x_min_ = DM({-5, -5, -M_PI});
-        x_max_ = DM({10, 10, M_PI});
-        v_min_ = -1;
-        v_max_ = 1;
-        omega_min_ = -M_PI/2;
-        omega_max_ = M_PI/2;
+        std::vector<double> x_min_vec = {-5, -5, -M_PI};
+        std::vector<double> x_max_vec = {10, 10, M_PI};
+        pnh.getParam("x_min", x_min_vec);
+        pnh.getParam("x_max", x_max_vec);
+        x_min_ = DM(x_min_vec);
+        x_max_ = DM(x_max_vec);
+
+        pnh.param("v_min", v_min_, -1.0);
+        pnh.param("v_max", v_max_, 1.0);
+        pnh.param("omega_min", omega_min_, -M_PI/2);    
+        pnh.param("omega_max", omega_max_, M_PI/2);
+
+        pnh.param("goal_dist_th", goal_dist_th_, 0.2);
+
         ros::waitForShutdown();
     }
 
-    void poseCallback(const gazebo_msgs::ModelStates::ConstPtr& msg) {
+    void poseCallbackSim(const gazebo_msgs::ModelStates::ConstPtr& msg) {
         try {
             // Find the index of the robot in the ModelStates message
             auto it = std::find(msg->name.begin(), msg->name.end(), robot_name_);
@@ -78,7 +101,6 @@ public:
                 size_t index = std::distance(msg->name.begin(), it);
                 
                 // Extract the robot's pose
-                // ROS_INFO("Pose update!");
                 robot_pose_ = msg->pose[index];
                 
                 // Publish the current pose
@@ -87,7 +109,19 @@ public:
                 ROS_WARN("Robot name not found in ModelStates");
             }
         } catch (const std::exception &e) {
-            ROS_WARN("Exception in poseCallback: %s", e.what());
+            ROS_WARN("Exception in poseCallbackSim: %s", e.what());
+        }
+    }
+
+    void poseCallbackReal(const geometry_msgs::PoseStamped::ConstPtr& msg) {
+        try {
+            // Extract the robot's pose
+            robot_pose_ = msg->pose;
+            
+            // Publish the current pose
+            publishCurrentPose();
+        } catch (const std::exception &e) {
+            ROS_WARN("Exception in poseCallbackReal: %s", e.what());
         }
     }
 
@@ -279,10 +313,12 @@ private:
     DM x_min_, x_max_;
     double v_min_, v_max_;
     double omega_min_, omega_max_;
+
+    double goal_dist_th_;
 };
 
 int main(int argc, char** argv) {
     ros::init(argc, argv, "simple_pose_controller");
-    SimplePoseController controller;
+    MPCController controller;
     return 0;
 }
