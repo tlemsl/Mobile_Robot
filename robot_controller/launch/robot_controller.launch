@@ -3,35 +3,47 @@
     <arg name="use_sim" default="true" />
     <arg name="robot_name" default="jackal" />
 
+    <arg name="path_tracking" default="true" />
+    <arg name="path_tracking_mode" default="0" />
+
     <!-- MPC parameters -->
-    <arg name="dt" default="0.5" />
-    <arg name="N" default="20" />
-    <arg name="Q" default="[10, 10, 1]" />
-    <arg name="R" default="[0.1, 0.1]" />
-    <arg name="x_min" default="[-5, -5, -3.14159]" />
-    <arg name="x_max" default="[10, 10, 3.14159]" />
-    <arg name="v_min" default="-1.0" />
-    <arg name="v_max" default="1.0" />
+    <arg name="dt" default="0.02" />
+    <arg name="N" default="50" />
+    <arg name="xy_cost" default="10" />
+    <arg name="yaw_cost" default="1" />
+    <arg name="control_cost" default="0.1" />
+    <!-- <arg name="x_min" default="[-100, -100, -3.14159]" />
+    <arg name="x_max" default="[100, 100, 3.14159]" /> -->
+    <arg name="v_min" default="-1" />
+    <arg name="v_max" default="1" />
     <arg name="omega_min" default="-1.5708" />
     <arg name="omega_max" default="1.5708" />
 
-    <arg name="goal_dist_th" default="0.2" />
+    <arg name="goal_dist_th" default="0.1" />
+    <arg name="update_dist_th" default="0.2" />
+    
     
     <node pkg="robot_controller" type="robot_controller_node" name="robot_controller_node" output="screen">
         <param name="use_sim" value="$(arg use_sim)" />
         <param name="robot_name" value="$(arg robot_name)" />
+        <param name="path_tracking" value="$(arg path_tracking)" />
+        <param name="path_tracking_mode" value="$(arg path_tracking_mode)" />
 
         <param name="dt" value="$(arg dt)" />
         <param name="N" value="$(arg N)" />
-        <param name="Q" value="$(arg Q)" />
-        <param name="R" value="$(arg R)" />
-        <param name="x_min" value="$(arg x_min)" />
-        <param name="x_max" value="$(arg x_max)" />
+        <param name="xy_cost" value="$(arg xy_cost)" />
+        <param name="yaw_cost" value="$(arg yaw_cost)" />
+        <param name="control_cost" value="$(arg control_cost)" />
+
+        <!-- <param name="x_min" value="$(arg x_min)" />
+        <param name="x_max" value="$(arg x_max)" /> -->
         <param name="v_min" value="$(arg v_min)" />
         <param name="v_max" value="$(arg v_max)" />
         <param name="omega_min" value="$(arg omega_min)" />
         <param name="omega_max" value="$(arg omega_max)" />
 
         <param name="goal_dist_th" value="$(arg goal_dist_th)" />
+        <param name="update_dist_th" value="$(arg update_dist_th)" />
+
     </node>
 </launch>
