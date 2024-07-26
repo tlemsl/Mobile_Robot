@@ -4,7 +4,7 @@
             "name": "Linux",
             "includePath": [
                 "${workspaceFolder}/**",
-                "/opt/ros/noetic/lib"
+                "/opt/ros/noetic/include"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/gcc",

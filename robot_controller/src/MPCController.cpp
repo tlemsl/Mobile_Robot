@@ -6,6 +6,7 @@
 #include <tf/tf.h>
 #include <casadi/casadi.hpp>
 #include <visualization_msgs/Marker.h>
+#include <std_msgs/Float32MultiArray.h>
 #include <vector>
 #include <algorithm>
 #include <chrono>  // Include the chrono library
@@ -55,6 +56,8 @@ public:
         // Publisher for the MPC trajectory
         trajectory_pub_ = nh.advertise<visualization_msgs::Marker>("/mpc_trajectory", 1);
 
+        debug_pub_ = nh.advertise<std_msgs::Float32MultiArray>("/tracking_error", 1);
+
         // Initialize robot and goal pose
         robot_pose_ = boost::none;
         goal_pose_ = boost::none;
@@ -73,9 +76,10 @@ public:
         std::vector<double> Q_vec = {xy_cost, xy_cost, yaw_cost};
         Q_ = DM::diag(DM(Q_vec));
         
-        double control_cost;
-        pnh.param("control_cost", control_cost, 0.1);
-        std::vector<double> R_vec = {control_cost, control_cost};
+        double v_cost, omega_cost;
+        pnh.param("v_cost_", v_cost, 0.1);
+        pnh.param("omega_cost_", omega_cost, 0.1);
+        std::vector<double> R_vec = {v_cost, omega_cost};
         R_ = DM::diag(DM(R_vec));
 
         // Define the state and control variables
@@ -92,8 +96,8 @@ public:
         dynamics_ = Function("dynamics", {state_, control_}, {state_dot_});
 
         // Define the state and control boundaries
-        std::vector<double> x_min_vec = {-1000, -1000, -M_PI};
-        std::vector<double> x_max_vec = {1000, 1000, M_PI};
+        std::vector<double> x_min_vec = {-1000, -1000, -2*M_PI};
+        std::vector<double> x_max_vec = {1000, 1000, 2*M_PI};
         // TODO(Minjong) ROS array parameters?
         // pnh.param("x_min", x_min_vec, {-5, -5, -M_PI});
         // pnh.getParam("x_max", x_max_vec);
@@ -110,6 +114,14 @@ public:
         pnh.param("update_dist_th", update_dist_th_, 0.1);
 
         ros::waitForShutdown();
+    }
+
+    MX pi2pi(MX angle) {
+        return fmod(angle + M_PI, 2 * M_PI) - M_PI;
+    }
+
+    double pi2pi(double angle){
+        return fmod(angle + M_PI, 2 * M_PI) - M_PI;
     }
 
     void poseCallbackSim(const gazebo_msgs::ModelStates::ConstPtr& msg) {
@@ -168,7 +180,7 @@ public:
         tf::quaternionMsgToTF(orientation, quat);
         double roll, pitch, yaw;
         tf::Matrix3x3(quat).getRPY(roll, pitch, yaw);
-        return yaw;
+        return pi2pi(yaw);
     }
 
     void navigateToGoal() {
@@ -196,13 +208,16 @@ public:
                 
                 double dx = goal_x - x;
                 double dy = goal_y - y;
-                double dtheta = goal_theta - theta;
-                double distance = sqrt(dx*dx + dy*dy + dtheta*dtheta);
+                double dtheta = pi2pi(goal_theta - theta);
+                double distance = sqrt(dx*dx + dy*dy);
                 std::chrono::duration<double> duration = std::chrono::high_resolution_clock::now() - start;
 
                 dt_ = duration.count();
                 ROS_INFO("Goal distance: %.2f elapsed time %.2f", distance, duration.count());
-                if (distance < goal_dist_th_) {
+                
+                publishErrorInfo(distance, dtheta);
+
+                if (distance < goal_dist_th_ && dtheta < 0.05) {
                     ROS_INFO("Reached the goal and aligned!");
                     publishVelocity(0, 0);
                     break;
@@ -214,6 +229,7 @@ public:
     }
 
     void navigateToPath() {
+        int nearest_index = 0;
         while (ros::ok()) {
             if (robot_pose_ && !path_.poses.empty()) {
                 double x = robot_pose_->position.x;
@@ -225,7 +241,7 @@ public:
                 double goal_y = path_.poses[last_idx].pose.position.y;
                 double goal_theta = getYaw(path_.poses[last_idx].pose.orientation);
 
-                int nearest_index = findNearestIndex();
+                nearest_index = findNearestIndex(nearest_index);
 
                 auto start = std::chrono::high_resolution_clock::now();
 
@@ -241,14 +257,17 @@ public:
                 
                 double dx = goal_x - x;
                 double dy = goal_y - y;
-                double dtheta = goal_theta - theta;
-                double distance = sqrt(dx*dx + dy*dy + dtheta*dtheta);
+                double dtheta = pi2pi(goal_theta - theta);
+                double distance = sqrt(dx*dx + dy*dy);
 
                 std::chrono::duration<double> duration = std::chrono::high_resolution_clock::now() - start;
                 
                 dt_ = duration.count();
                 ROS_INFO("Target idx: %d Goal distance: %.2f elapsed time %.2f",nearest_index, distance, duration.count());
-                if (distance < goal_dist_th_ && u_opt[0] < 0.1 && u_opt[1] < 0.1) {
+                
+                publishErrorInfo(distance, dtheta);
+
+                if (distance < goal_dist_th_&& dtheta < 0.05 && u_opt[0] < 0.1 && u_opt[1] < 0.1) {
                     ROS_INFO("Reached the goal and aligned!");
                     publishVelocity(0, 0);
                     break;
@@ -273,7 +292,12 @@ public:
                 double goal_x = path_.poses[target_index].pose.position.x;
                 double goal_y = path_.poses[target_index].pose.position.y;
                 double goal_theta = getYaw(path_.poses[target_index].pose.orientation);
-                
+
+                double dx = goal_x - x;
+                double dy = goal_y - y;
+                double dtheta = pi2pi(goal_theta - theta);
+                double distance = sqrt(dx*dx + dy*dy);
+
                 DM x0 = DM::vertcat({x, y, theta});
                 DM x_ref = DM::vertcat({goal_x, goal_y, goal_theta});
                 
@@ -284,19 +308,22 @@ public:
                 publishVelocity(u_opt[0], u_opt[1]);
                 publishTrajectory(X_pred);
                 publishTargetTrajectory(target_index);
+                publishErrorInfo(distance, dtheta);
+
                 int last_idx = static_cast<int>(path_.poses.size() - 1);
                 goal_x = path_.poses[last_idx].pose.position.x;
                 goal_y = path_.poses[last_idx].pose.position.y;
                 goal_theta = getYaw(path_.poses[last_idx].pose.orientation);
 
-                double dx = goal_x - x;
-                double dy = goal_y - y;
-                double dtheta = goal_theta - theta;
-                double distance = sqrt(dx*dx + dy*dy + dtheta*dtheta);
+                dx = goal_x - x;
+                dy = goal_y - y;
+                dtheta = pi2pi(goal_theta - theta);
+                distance = sqrt(dx*dx + dy*dy + dtheta*dtheta);
                 std::chrono::duration<double> duration = std::chrono::high_resolution_clock::now() - start;
                 
                 dt_ = duration.count();
                 ROS_INFO("Target idx: %d Goal distance: %.2f elapsed time %.2f",target_index, distance, duration.count());
+                
                 if (distance < goal_dist_th_ && u_opt[0] < 0.1 && u_opt[1] < 0.1 && target_index == last_idx) {
                     ROS_INFO("Reached the goal and aligned!");
                     publishVelocity(0, 0);
@@ -327,7 +354,7 @@ public:
         }
         
         // Control and state constraints
-        opti.subject_to(opti.bounded(x_min_, X, x_max_));
+        // opti.subject_to(opti.bounded(x_min_, X, x_max_));
         opti.subject_to(opti.bounded(v_min_, U(0, Slice()), v_max_));
         opti.subject_to(opti.bounded(omega_min_, U(1, Slice()), omega_max_));
         
@@ -335,6 +362,7 @@ public:
         MX J = 0;
         for (int k = 0; k < N_; ++k) {
             MX state_error = X(Slice(), k) - x_ref;
+            state_error(2) = pi2pi(state_error(2));
             J += mtimes(state_error.T(), mtimes(Q_, state_error)) + mtimes(U(Slice(), k).T(), mtimes(R_, U(Slice(), k)));
         }
         opti.minimize(J);
@@ -380,7 +408,7 @@ public:
         }
 
         // Control and state constraints
-        opti.subject_to(opti.bounded(x_min_, X, x_max_));
+        // opti.subject_to(opti.bounded(x_min_, X, x_max_));
         opti.subject_to(opti.bounded(v_min_, U(0, Slice()), v_max_));
         opti.subject_to(opti.bounded(omega_min_, U(1, Slice()), omega_max_));
 
@@ -404,6 +432,7 @@ public:
 
             // Calculate the error between the state and the reference
             MX state_error = state - MX::vertcat({ref_x, ref_y, ref_theta});
+            state_error(2) = pi2pi(state_error(2));
             J += mtimes(state_error.T(), mtimes(Q_, state_error)) + mtimes(U(Slice(), k).T(), mtimes(R_, U(Slice(), k)));
         }
         opti.minimize(J);
@@ -430,13 +459,13 @@ public:
         return std::make_pair(u_opt, X_pred);
     }
 
-    int findNearestIndex() {
+    int findNearestIndex(int pre_idx) {
         double min_distance = std::numeric_limits<double>::infinity();
         int nearest_index = 0;
         const double state_x = robot_pose_->position.x;
         const double state_y = robot_pose_->position.y;
 
-        for (size_t i = 0; i < path_.poses.size(); ++i) {
+        for (size_t i = pre_idx; i < path_.poses.size(); ++i) {
             double path_x = path_.poses[i].pose.position.x;
             double path_y = path_.poses[i].pose.position.y;
 
@@ -456,18 +485,21 @@ public:
     int updateTargetIndex(int index) {
         const double state_x = robot_pose_->position.x;
         const double state_y = robot_pose_->position.y;
-
-        const double path_x = path_.poses[index].pose.position.x;
-        const double path_y = path_.poses[index].pose.position.y;
+        int path_size = static_cast<int>(path_.poses.size());
+        for(int i = index; i<path_size; i++){
+            const double path_x = path_.poses[i].pose.position.x;
+            const double path_y = path_.poses[i].pose.position.y;
+            
+            const double dx = state_x - path_x;
+            const double dy = state_y - path_y;
+            const double distance = std::sqrt(dx * dx + dy * dy);
+            if(distance > update_dist_th_) {
+               return i;
+            }
+        }
         
-        const double dx = state_x - path_x;
-        const double dy = state_y - path_y;
-        const double distance = std::sqrt(dx * dx + dy * dy);
-
-        if(distance < update_dist_th_) {
-            return std::min(static_cast<int>(path_.poses.size() - 1), index+1);
-        }    
-        return index;
+            
+        return path_size - 1;
     }
 
     void publishVelocity(double linear, double angular) {
@@ -549,6 +581,13 @@ public:
         }
         trajectory_pub_.publish(marker);
     }
+    void publishErrorInfo(double distance, double dtheta) {
+        std_msgs::Float32MultiArray msg;
+        msg.data.push_back(distance);
+        msg.data.push_back(dtheta);
+        debug_pub_.publish(msg);
+    }
+
 private:
     ros::Subscriber pose_sub_;
     ros::Subscriber goal_sub_;
@@ -556,6 +595,7 @@ private:
     ros::Publisher cmd_vel_pub_;
     ros::Publisher current_pose_pub_;
     ros::Publisher trajectory_pub_;
+    ros::Publisher debug_pub_;
 
     boost::optional<geometry_msgs::Pose> robot_pose_;
     boost::optional<geometry_msgs::PoseStamped> goal_pose_;
