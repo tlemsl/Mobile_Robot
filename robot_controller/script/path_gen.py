@@ -39,8 +39,8 @@ def generate_sin_path(length, fragment_size, start_pose):
     num_points = int(length / fragment_size)
     for i in range(num_points):
         x = i * fragment_size
-        y = 0.15* length * np.cos(x * (2 * np.pi / length)) - 0.15 * length
-        yaw = np.arctan2( - 0.15* length* np.sin(x * (2 * np.pi / length)) * (2 * np.pi / length), 1)
+        y = 0.1* length * np.cos(x * (2 * np.pi / length)) - 0.1 * length
+        yaw = np.arctan2( - 0.1* length* np.sin(x * (2 * np.pi / length)) * (2 * np.pi / length), 1)
         x_trans, y_trans, new_yaw = transform_point(x, y, yaw, start_pose)
         quat = quaternion_from_euler(0, 0, new_yaw)
         pose = PoseStamped()
