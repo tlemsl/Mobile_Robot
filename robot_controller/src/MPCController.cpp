@@ -11,6 +11,8 @@
 #include <algorithm>
 #include <chrono>  // Include the chrono library
 
+#include <map>
+
 using namespace casadi;
 
 class MPCController {
@@ -64,6 +66,7 @@ public:
         
         // Get the robot name from parameters or use default
         pnh.param<std::string>("robot_name", robot_name_, "jackal");
+        pnh.param<std::string>("logfile_path", logfile_path_, "/workspace");
 
         // MPC parameters
         pnh.param("dt", dt_, 0.5);
@@ -216,10 +219,11 @@ public:
                 ROS_INFO("Goal distance: %.2f elapsed time %.2f", distance, duration.count());
                 
                 publishErrorInfo(distance, dtheta);
-
+                error_dynamics_[ros::Time::now()] = {distance, dtheta, u_opt[0], u_opt[1]};
                 if (distance < goal_dist_th_ && dtheta < 0.05) {
                     ROS_INFO("Reached the goal and aligned!");
                     publishVelocity(0, 0);
+                    writeCSV(error_dynamics_, logfile_path_);
                     break;
                 }
             } else {
@@ -266,10 +270,12 @@ public:
                 ROS_INFO("Target idx: %d Goal distance: %.2f elapsed time %.2f",nearest_index, distance, duration.count());
                 
                 publishErrorInfo(distance, dtheta);
+                error_dynamics_[ros::Time::now()] = {distance, dtheta, u_opt[0], u_opt[1]};
 
                 if (distance < goal_dist_th_&& dtheta < 0.05 && u_opt[0] < 0.1 && u_opt[1] < 0.1) {
                     ROS_INFO("Reached the goal and aligned!");
                     publishVelocity(0, 0);
+                    writeCSV(error_dynamics_, logfile_path_);
                     break;
                 }
             } else {
@@ -280,6 +286,7 @@ public:
 
     void navigateToPath2() {
         int target_index = 0;
+
         while (ros::ok()) {
             if (robot_pose_ && !path_.poses.empty()) {
                 auto start = std::chrono::high_resolution_clock::now();
@@ -309,6 +316,7 @@ public:
                 publishTrajectory(X_pred);
                 publishTargetTrajectory(target_index);
                 publishErrorInfo(distance, dtheta);
+                error_dynamics_[ros::Time::now()] = {distance, dtheta, u_opt[0], u_opt[1]};
 
                 int last_idx = static_cast<int>(path_.poses.size() - 1);
                 goal_x = path_.poses[last_idx].pose.position.x;
@@ -327,6 +335,7 @@ public:
                 if (distance < goal_dist_th_ && u_opt[0] < 0.1 && u_opt[1] < 0.1 && target_index == last_idx) {
                     ROS_INFO("Reached the goal and aligned!");
                     publishVelocity(0, 0);
+                    writeCSV(error_dynamics_, logfile_path_);
                     break;
                 }
             } else {
@@ -344,13 +353,30 @@ public:
         
         opti.subject_to(X(Slice(), 0) == x0);
         
-        // System dynamics constraints
+        // System dynamics constraints w forward euler methods
+        // for (int k = 0; k < N_; ++k) {
+        //     MX state_k = X(Slice(), k);
+        //     MX control_k = U(Slice(), k);
+        //     MX state_next = X(Slice(), k + 1);
+        //     MX state_dot_k = dynamics_(std::vector<MX>{state_k, control_k})[0];
+        //     opti.subject_to(state_next == state_k + dt_ * state_dot_k);
+        // }
+
+        // System dynamics constraints w RK4
         for (int k = 0; k < N_; ++k) {
             MX state_k = X(Slice(), k);
             MX control_k = U(Slice(), k);
             MX state_next = X(Slice(), k + 1);
-            MX state_dot_k = dynamics_(std::vector<MX>{state_k, control_k})[0];
-            opti.subject_to(state_next == state_k + dt_ * state_dot_k);
+            
+            // RK4 method calculations
+            MX k1 = dynamics_(std::vector<MX>{state_k, control_k})[0];
+            MX k2 = dynamics_(std::vector<MX>{state_k + dt_/2 * k1, control_k})[0];
+            MX k3 = dynamics_(std::vector<MX>{state_k + dt_/2 * k2, control_k})[0];
+            MX k4 = dynamics_(std::vector<MX>{state_k + dt_ * k3, control_k})[0];
+            
+            MX state_next_rk4 = state_k + (dt_/6) * (k1 + 2*k2 + 2*k3 + k4);
+            
+            opti.subject_to(state_next == state_next_rk4);
         }
         
         // Control and state constraints
@@ -398,13 +424,30 @@ public:
 
         opti.subject_to(X(Slice(), 0) == x0);
 
-        // System dynamics constraints
+        // System dynamics constraints w forward euler methods
+        // for (int k = 0; k < N_; ++k) {
+        //     MX state_k = X(Slice(), k);
+        //     MX control_k = U(Slice(), k);
+        //     MX state_next = X(Slice(), k + 1);
+        //     MX state_dot_k = dynamics_(std::vector<MX>{state_k, control_k})[0];
+        //     opti.subject_to(state_next == state_k + dt_ * state_dot_k);
+        // }
+
+        // System dynamics constraints w RK4
         for (int k = 0; k < N_; ++k) {
             MX state_k = X(Slice(), k);
             MX control_k = U(Slice(), k);
             MX state_next = X(Slice(), k + 1);
-            MX state_dot_k = dynamics_(std::vector<MX>{state_k, control_k})[0];
-            opti.subject_to(state_next == state_k + dt_ * state_dot_k);
+            
+            // RK4 method calculations
+            MX k1 = dynamics_(std::vector<MX>{state_k, control_k})[0];
+            MX k2 = dynamics_(std::vector<MX>{state_k + dt_/2 * k1, control_k})[0];
+            MX k3 = dynamics_(std::vector<MX>{state_k + dt_/2 * k2, control_k})[0];
+            MX k4 = dynamics_(std::vector<MX>{state_k + dt_ * k3, control_k})[0];
+            
+            MX state_next_rk4 = state_k + (dt_/6) * (k1 + 2*k2 + 2*k3 + k4);
+            
+            opti.subject_to(state_next == state_next_rk4);
         }
 
         // Control and state constraints
@@ -588,6 +631,41 @@ public:
         debug_pub_.publish(msg);
     }
 
+    std::string toCSVString(const ros::Time& time) {
+        return std::to_string(time.sec) + "." + std::to_string(time.nsec);
+    }
+
+    void writeCSV(std::map<ros::Time, std::vector<double>>& error_dynamics, const std::string& filename) {
+        std::string full_filename = filename + std::to_string(log_number) + ".csv";
+        std::ofstream file(full_filename);
+
+        if (!file.is_open()) {
+            std::cerr << "Error opening file: " << full_filename << std::endl;
+            return;
+        }
+
+        // Write header
+        file << "timestamp,e_distance,e_theta,v,w\n";
+
+        for (const auto& entry : error_dynamics) {
+            const ros::Time& timestamp = entry.first;
+            const std::vector<double>& values = entry.second;
+
+            if (values.size() == 4) {
+                file << toCSVString(timestamp) << ","
+                    << values[0] << ","
+                    << values[1] << ","
+                    << values[2] << ","
+                    << values[3] << "\n";
+            } else {
+                std::cerr << "Unexpected vector size for timestamp " << toCSVString(timestamp) << std::endl;
+            }
+        }
+
+        file.close();
+        error_dynamics.clear();
+    }
+    
 private:
     ros::Subscriber pose_sub_;
     ros::Subscriber goal_sub_;
@@ -621,6 +699,10 @@ private:
     double update_dist_th_;
 
     int path_tracking_mode_ = 0; // 0: horizon cost, 1: target cost
+    
+    std::string logfile_path_;
+    int log_number = 0;
+    std::map<ros::Time, std::vector<double>> error_dynamics_;
 };
 
 int main(int argc, char** argv) {
