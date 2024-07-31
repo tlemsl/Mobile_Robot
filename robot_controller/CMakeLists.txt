@@ -9,6 +9,7 @@ SET(CMAKE_EXE_LINKER_FLAGS
 
 find_package(casadi REQUIRED)
 find_package(Threads REQUIRED)
+find_package(Eigen3 REQUIRED)
 
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Release")
@@ -77,6 +78,7 @@ catkin_package(
 include_directories(
   include
   ${catkin_INCLUDE_DIRS}
+  ${EIGEN3_INCLUDE_DIR}
 )
 include_directories(
     SYSTEM ${IPOPT_INCLUDE_DIRS}

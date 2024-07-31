@@ -1,30 +1,30 @@
 <launch>
 
-    <arg name="logfile_path" default="$(find robot_controller)/log/" />
+    <arg name="logfile_path" default="/run/user/1000/gvfs/smb-share:server=129.254.233.221,share=smartmobile/98_개인폴더/진용식/rosbag/0731_data/s_path_tracking/" />
 
     <!-- Mode parameters -->
     <arg name="use_sim" default="true" />
     <arg name="robot_name" default="jackal" />
 
-    <arg name="path_tracking" default="true" />
-    <arg name="path_tracking_mode" default="0" />
+    <arg name="path_tracking" default="false" />
+    <arg name="path_tracking_mode" default="1" />
 
     <!-- MPC parameters -->
     <arg name="dt" default="0.02" />
-    <arg name="N" default="20" />
+    <arg name="N" default="40" />
     <arg name="xy_cost" default="10" />
-    <arg name="yaw_cost" default="10" />
-    <arg name="v_cost" default="1" />
-    <arg name="omega_cost" default="0.1" />
+    <arg name="yaw_cost" default="1" />
+    <arg name="v_cost" default="0.1" />
+    <arg name="omega_cost" default="0.3" />
     <!-- <arg name="x_min" default="[-100, -100, -3.14159]" />
     <arg name="x_max" default="[100, 100, 3.14159]" /> -->
-    <arg name="v_min" default="-0.3" />
-    <arg name="v_max" default="0.3" />
-    <arg name="omega_min" default="-0.7" />
-    <arg name="omega_max" default="0.7" />
+    <arg name="v_min" default="-1" />
+    <arg name="v_max" default="1" />
+    <arg name="omega_min" default="-1" />
+    <arg name="omega_max" default="1" />
 
-    <arg name="goal_dist_th" default="0.1" />
-    <arg name="update_dist_th" default="0.15" />
+    <arg name="goal_dist_th" default="0.15" />
+    <arg name="update_dist_th" default="0.2" />
     
     
     <node pkg="robot_controller" type="robot_controller_node" name="robot_controller_node" output="screen">

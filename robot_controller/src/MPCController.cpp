@@ -8,10 +8,12 @@
 #include <visualization_msgs/Marker.h>
 #include <std_msgs/Float32MultiArray.h>
 #include <vector>
+#include <map>
+
 #include <algorithm>
 #include <chrono>  // Include the chrono library
 
-#include <map>
+#include <Eigen/Core>
 
 using namespace casadi;
 
@@ -116,6 +118,18 @@ public:
         pnh.param("goal_dist_th", goal_dist_th_, 0.2);
         pnh.param("update_dist_th", update_dist_th_, 0.1);
 
+        std::string full_filename = logfile_path_ + "data" + ".csv";
+        file_ = std::ofstream(full_filename);
+
+        if (!file_.is_open()) {
+            std::cerr << "Error opening file_: " << full_filename << std::endl;
+            return;
+        }
+        // Write header
+        file_ << "timestamp,dx,dy, dtheta, v,w\n";
+        K_ << 0.2546, -0.5440, 0,
+              -1.2602, -8.0162, 0,
+              0,0,0;
         ros::waitForShutdown();
     }
 
@@ -206,24 +220,25 @@ public:
                 std::vector<double> u_opt = result.first;
                 std::vector<DM> X_pred = result.second;
                 
-                publishVelocity(u_opt[0], u_opt[1]);
+                
                 publishTrajectory(X_pred);
                 
                 double dx = goal_x - x;
                 double dy = goal_y - y;
-                double dtheta = pi2pi(goal_theta - theta);
+                double dtheta = goal_theta - theta;
                 double distance = sqrt(dx*dx + dy*dy);
                 std::chrono::duration<double> duration = std::chrono::high_resolution_clock::now() - start;
 
                 dt_ = duration.count();
-                ROS_INFO("Goal distance: %.2f elapsed time %.2f", distance, duration.count());
+                ROS_INFO("Goal distance: %.2f D theta: %.2f elapsed time %.2f", distance, dtheta, duration.count());
                 
-                publishErrorInfo(distance, dtheta);
-                error_dynamics_[ros::Time::now()] = {distance, dtheta, u_opt[0], u_opt[1]};
-                if (distance < goal_dist_th_ && dtheta < 0.05) {
+                publishErrorInfo(dx, dy, dtheta);
+                publishVelocity(u_opt[0], u_opt[1], dx, dy, dtheta);
+                error_dynamics_[ros::Time::now()] = {dx, dy, dtheta, u_opt[0], u_opt[1]};
+                if (distance < goal_dist_th_ && std::abs(dtheta) < 0.01 && u_opt[0] < 0.1 && u_opt[1] < 0.1) {
                     ROS_INFO("Reached the goal and aligned!");
                     publishVelocity(0, 0);
-                    writeCSV(error_dynamics_, logfile_path_);
+                    writeCSV();
                     break;
                 }
             } else {
@@ -255,7 +270,6 @@ public:
                 std::vector<double> u_opt = result.first;
                 std::vector<DM> X_pred = result.second;
 
-                publishVelocity(u_opt[0], u_opt[1]);
                 publishTrajectory(X_pred);
                 publishTargetTrajectory(nearest_index);
                 
@@ -263,19 +277,20 @@ public:
                 double dy = goal_y - y;
                 double dtheta = pi2pi(goal_theta - theta);
                 double distance = sqrt(dx*dx + dy*dy);
+                publishVelocity(u_opt[0], u_opt[1], dx, dy, dtheta);
 
                 std::chrono::duration<double> duration = std::chrono::high_resolution_clock::now() - start;
                 
                 dt_ = duration.count();
                 ROS_INFO("Target idx: %d Goal distance: %.2f elapsed time %.2f",nearest_index, distance, duration.count());
-                
-                publishErrorInfo(distance, dtheta);
-                error_dynamics_[ros::Time::now()] = {distance, dtheta, u_opt[0], u_opt[1]};
+
+                publishErrorInfo(dx, dy, dtheta);
+                error_dynamics_[ros::Time::now()] = {dx,dy, dtheta, u_opt[0], u_opt[1]};
 
                 if (distance < goal_dist_th_&& dtheta < 0.05 && u_opt[0] < 0.1 && u_opt[1] < 0.1) {
                     ROS_INFO("Reached the goal and aligned!");
                     publishVelocity(0, 0);
-                    writeCSV(error_dynamics_, logfile_path_);
+                    writeCSV();
                     break;
                 }
             } else {
@@ -312,11 +327,11 @@ public:
                 std::vector<double> u_opt = result.first;
                 std::vector<DM> X_pred = result.second;
                 
-                publishVelocity(u_opt[0], u_opt[1]);
+                publishVelocity(u_opt[0], u_opt[1], dx, dy, dtheta);
                 publishTrajectory(X_pred);
                 publishTargetTrajectory(target_index);
-                publishErrorInfo(distance, dtheta);
-                error_dynamics_[ros::Time::now()] = {distance, dtheta, u_opt[0], u_opt[1]};
+                publishErrorInfo(dx, dy, dtheta);
+                error_dynamics_[ros::Time::now()] = {dx, dy, dtheta, u_opt[0], u_opt[1]};
 
                 int last_idx = static_cast<int>(path_.poses.size() - 1);
                 goal_x = path_.poses[last_idx].pose.position.x;
@@ -335,7 +350,7 @@ public:
                 if (distance < goal_dist_th_ && u_opt[0] < 0.1 && u_opt[1] < 0.1 && target_index == last_idx) {
                     ROS_INFO("Reached the goal and aligned!");
                     publishVelocity(0, 0);
-                    writeCSV(error_dynamics_, logfile_path_);
+                    writeCSV();
                     break;
                 }
             } else {
@@ -545,10 +560,26 @@ public:
         return path_size - 1;
     }
 
-    void publishVelocity(double linear, double angular) {
+    void publishVelocity(double linear, double angular, double dx = 0,  double dy = 0, double dtheta = 0) {
+        Eigen::Vector3d error;
+        error(0) = dx;
+        error(1) = dy;
+        error(2) = dtheta;
+
+        Eigen::Vector3d auxilary_input = K_*error;
+
         geometry_msgs::Twist twist;
+        // twist.linear.x = auxilary_input[0];
+        // twist.angular.z = auxilary_input[1];
         twist.linear.x = linear;
         twist.angular.z = angular;
+
+
+        twist.linear.x = std::min(v_max_, std::max(v_min_, twist.linear.x));
+        twist.angular.z = std::min(omega_max_, std::max(omega_min_, twist.angular.z));
+        
+
+        ROS_INFO("MPC input v: %.2f w: %.2f\t Auxilary input v: %.2f w: %.2f", linear, angular, auxilary_input[0], auxilary_input[1]);
         cmd_vel_pub_.publish(twist);
     }
 
@@ -624,9 +655,10 @@ public:
         }
         trajectory_pub_.publish(marker);
     }
-    void publishErrorInfo(double distance, double dtheta) {
+    void publishErrorInfo(double dx, double dy, double dtheta) {
         std_msgs::Float32MultiArray msg;
-        msg.data.push_back(distance);
+        msg.data.push_back(dx);
+        msg.data.push_back(dy);
         msg.data.push_back(dtheta);
         debug_pub_.publish(msg);
     }
@@ -635,35 +667,29 @@ public:
         return std::to_string(time.sec) + "." + std::to_string(time.nsec);
     }
 
-    void writeCSV(std::map<ros::Time, std::vector<double>>& error_dynamics, const std::string& filename) {
-        std::string full_filename = filename + std::to_string(log_number) + ".csv";
-        std::ofstream file(full_filename);
+    void writeCSV() {
+        
 
-        if (!file.is_open()) {
-            std::cerr << "Error opening file: " << full_filename << std::endl;
-            return;
-        }
 
-        // Write header
-        file << "timestamp,e_distance,e_theta,v,w\n";
 
-        for (const auto& entry : error_dynamics) {
+        for (const auto& entry : error_dynamics_) {
             const ros::Time& timestamp = entry.first;
             const std::vector<double>& values = entry.second;
 
-            if (values.size() == 4) {
-                file << toCSVString(timestamp) << ","
+            if (values.size() == 5) {
+                file_ << toCSVString(timestamp) << ","
                     << values[0] << ","
                     << values[1] << ","
                     << values[2] << ","
-                    << values[3] << "\n";
+                    << values[3] << ","
+                    << values[4] << "\n";
             } else {
                 std::cerr << "Unexpected vector size for timestamp " << toCSVString(timestamp) << std::endl;
             }
         }
 
-        file.close();
-        error_dynamics.clear();
+        file_.flush();
+        error_dynamics_.clear();
     }
     
 private:
@@ -703,6 +729,9 @@ private:
     std::string logfile_path_;
     int log_number = 0;
     std::map<ros::Time, std::vector<double>> error_dynamics_;
+
+    Eigen::Matrix3d K_;
+    std::ofstream file_;
 };
 
 int main(int argc, char** argv) {
