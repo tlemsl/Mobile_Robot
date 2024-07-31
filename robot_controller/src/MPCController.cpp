@@ -126,10 +126,10 @@ public:
             return;
         }
         // Write header
-        file_ << "timestamp,dx,dy, dtheta, v,w\n";
-        K_ << 0.2546, -0.5440, 0,
-              -1.2602, -8.0162, 0,
-              0,0,0;
+        file_ << "timestamp,dx,dy,dtheta,v,w\n";
+        K_ << 0.2546, -0.5440,
+              -1.2602, -8.0162,
+              0,0;
         ros::waitForShutdown();
     }
 
@@ -566,7 +566,7 @@ public:
         error(1) = dy;
         error(2) = dtheta;
 
-        Eigen::Vector3d auxilary_input = K_*error;
+        Eigen::Vector2d auxilary_input = K_*error;
 
         geometry_msgs::Twist twist;
         // twist.linear.x = auxilary_input[0];
@@ -730,7 +730,7 @@ private:
     int log_number = 0;
     std::map<ros::Time, std::vector<double>> error_dynamics_;
 
-    Eigen::Matrix3d K_;
+    Eigen::Matrix<double, 2,3> K_;
     std::ofstream file_;
 };
 

@@ -15,7 +15,7 @@
     <arg name="xy_cost" default="10" />
     <arg name="yaw_cost" default="1" />
     <arg name="v_cost" default="0.1" />
-    <arg name="omega_cost" default="0.3" />
+    <arg name="omega_cost" default="1" />
     <!-- <arg name="x_min" default="[-100, -100, -3.14159]" />
     <arg name="x_max" default="[100, 100, 3.14159]" /> -->
     <arg name="v_min" default="-1" />
