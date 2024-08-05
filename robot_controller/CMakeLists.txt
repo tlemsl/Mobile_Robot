@@ -65,7 +65,6 @@ find_package(catkin REQUIRED COMPONENTS
 ## catkin specific configuration ##
 ###################################
 catkin_package(
-  INCLUDE_DIRS include
   LIBRARIES robot_controller
   CATKIN_DEPENDS roscpp std_msgs geometry_msgs gazebo_msgs visualization_msgs tf
 )
@@ -76,7 +75,6 @@ catkin_package(
 
 ## Specify additional locations of header files
 include_directories(
-  include
   ${catkin_INCLUDE_DIRS}
   ${EIGEN3_INCLUDE_DIR}
 )
