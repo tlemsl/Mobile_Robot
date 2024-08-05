@@ -15,7 +15,9 @@
 
 #include <Eigen/Core>
 
+using namespace Eigen;
 using namespace casadi;
+
 
 class MPCController {
 public:
@@ -118,7 +120,7 @@ public:
         pnh.param("goal_dist_th", goal_dist_th_, 0.2);
         pnh.param("update_dist_th", update_dist_th_, 0.1);
 
-        std::string full_filename = logfile_path_ + "data" + ".csv";
+        std::string full_filename = logfile_path_ + "data2" + ".csv";
         file_ = std::ofstream(full_filename);
 
         if (!file_.is_open()) {
@@ -126,10 +128,24 @@ public:
             return;
         }
         // Write header
-        file_ << "timestamp,dx,dy,dtheta,v,w\n";
+        file_ << "timestamp,distace,dtheta,v,w\n";
         K_ << 0.2546, -0.5440,
-              -1.2602, -8.0162,
-              0,0;
+              -1.2602, -8.0162;
+
+        // Weight of gate units
+        W_zh << -0.0512, -0.1653, -0.3561, -0.2491;
+        W_zx << 0.0995, -0.0364, 0.1413, 0.6639;
+        B_z << 0.1960 - 0.8159, -0.9793 - 0.0821;
+
+        W_rh << -0.1066, 0.3665, 0.0784, -0.0742;
+        W_rx << -0.1479, -0.2248, 0.0215, 0.0066;
+        B_r << -0.0005 - 0.0005, -0.2906 - 0.2906;
+        // Gain matrices initialization
+        K.resize(4);
+        K[0] << 0.3194, -0.3194, -0.9369, 1.4054;
+        K[1] << 319.4024, 97.6146, -936.9007, -429.5057;
+        K[2] << -0.0976, -0.3194, 0.2864, 1.4054;
+        K[3] << -97.6307, 97.6239, 286.3969, -429.5329;
         ros::waitForShutdown();
     }
 
@@ -197,7 +213,7 @@ public:
         tf::quaternionMsgToTF(orientation, quat);
         double roll, pitch, yaw;
         tf::Matrix3x3(quat).getRPY(roll, pitch, yaw);
-        return pi2pi(yaw);
+        return yaw;
     }
 
     void navigateToGoal() {
@@ -233,8 +249,8 @@ public:
                 ROS_INFO("Goal distance: %.2f D theta: %.2f elapsed time %.2f", distance, dtheta, duration.count());
                 
                 publishErrorInfo(dx, dy, dtheta);
-                publishVelocity(u_opt[0], u_opt[1], dx, dy, dtheta);
-                error_dynamics_[ros::Time::now()] = {dx, dy, dtheta, u_opt[0], u_opt[1]};
+                publishVelocity(u_opt[0], u_opt[1], distance, dtheta);
+                error_dynamics_[ros::Time::now()] = {distance, dtheta, u_opt[0], u_opt[1]};
                 if (distance < goal_dist_th_ && std::abs(dtheta) < 0.01 && u_opt[0] < 0.1 && u_opt[1] < 0.1) {
                     ROS_INFO("Reached the goal and aligned!");
                     publishVelocity(0, 0);
@@ -275,9 +291,9 @@ public:
                 
                 double dx = goal_x - x;
                 double dy = goal_y - y;
-                double dtheta = pi2pi(goal_theta - theta);
+                double dtheta = goal_theta - theta;
                 double distance = sqrt(dx*dx + dy*dy);
-                publishVelocity(u_opt[0], u_opt[1], dx, dy, dtheta);
+                publishVelocity(u_opt[0], u_opt[1], distance, dtheta);
 
                 std::chrono::duration<double> duration = std::chrono::high_resolution_clock::now() - start;
                 
@@ -285,7 +301,7 @@ public:
                 ROS_INFO("Target idx: %d Goal distance: %.2f elapsed time %.2f",nearest_index, distance, duration.count());
 
                 publishErrorInfo(dx, dy, dtheta);
-                error_dynamics_[ros::Time::now()] = {dx,dy, dtheta, u_opt[0], u_opt[1]};
+                error_dynamics_[ros::Time::now()] = {distance, dtheta, u_opt[0], u_opt[1]};
 
                 if (distance < goal_dist_th_&& dtheta < 0.05 && u_opt[0] < 0.1 && u_opt[1] < 0.1) {
                     ROS_INFO("Reached the goal and aligned!");
@@ -317,7 +333,7 @@ public:
 
                 double dx = goal_x - x;
                 double dy = goal_y - y;
-                double dtheta = pi2pi(goal_theta - theta);
+                double dtheta = goal_theta - theta;
                 double distance = sqrt(dx*dx + dy*dy);
 
                 DM x0 = DM::vertcat({x, y, theta});
@@ -327,11 +343,11 @@ public:
                 std::vector<double> u_opt = result.first;
                 std::vector<DM> X_pred = result.second;
                 
-                publishVelocity(u_opt[0], u_opt[1], dx, dy, dtheta);
+                publishVelocity(u_opt[0], u_opt[1], distance, dtheta);
                 publishTrajectory(X_pred);
                 publishTargetTrajectory(target_index);
                 publishErrorInfo(dx, dy, dtheta);
-                error_dynamics_[ros::Time::now()] = {dx, dy, dtheta, u_opt[0], u_opt[1]};
+                error_dynamics_[ros::Time::now()] = {distance, dtheta, u_opt[0], u_opt[1]};
 
                 int last_idx = static_cast<int>(path_.poses.size() - 1);
                 goal_x = path_.poses[last_idx].pose.position.x;
@@ -340,7 +356,7 @@ public:
 
                 dx = goal_x - x;
                 dy = goal_y - y;
-                dtheta = pi2pi(goal_theta - theta);
+                dtheta = goal_theta - theta;
                 distance = sqrt(dx*dx + dy*dy + dtheta*dtheta);
                 std::chrono::duration<double> duration = std::chrono::high_resolution_clock::now() - start;
                 
@@ -403,7 +419,7 @@ public:
         MX J = 0;
         for (int k = 0; k < N_; ++k) {
             MX state_error = X(Slice(), k) - x_ref;
-            state_error(2) = pi2pi(state_error(2));
+            state_error(2) = state_error(2);
             J += mtimes(state_error.T(), mtimes(Q_, state_error)) + mtimes(U(Slice(), k).T(), mtimes(R_, U(Slice(), k)));
         }
         opti.minimize(J);
@@ -560,19 +576,24 @@ public:
         return path_size - 1;
     }
 
-    void publishVelocity(double linear, double angular, double dx = 0,  double dy = 0, double dtheta = 0) {
-        Eigen::Vector3d error;
-        error(0) = dx;
-        error(1) = dy;
-        error(2) = dtheta;
+    void publishVelocity(double linear, double angular, double distance = 0, double dtheta = 0) {
+        Eigen::Vector2d error, u;
+        error(0) = distance;
+        error(1) = dtheta;
 
-        Eigen::Vector2d auxilary_input = K_*error;
+        std::vector<double> phi = membership(error, u);
+        Matrix2d Gain = Matrix2d::Zero();
+        for (int k = 0; k < 4; ++k) {
+            Gain += phi[k] * K[k];
+        }
+
+        Eigen::Vector2d auxilary_input = Gain*error;
 
         geometry_msgs::Twist twist;
-        // twist.linear.x = auxilary_input[0];
-        // twist.angular.z = auxilary_input[1];
-        twist.linear.x = linear;
-        twist.angular.z = angular;
+        twist.linear.x = auxilary_input[0];
+        twist.angular.z = auxilary_input[1];
+        // twist.linear.x = linear;
+        // twist.angular.z = angular;
 
 
         twist.linear.x = std::min(v_max_, std::max(v_min_, twist.linear.x));
@@ -668,30 +689,53 @@ public:
     }
 
     void writeCSV() {
-        
-
-
 
         for (const auto& entry : error_dynamics_) {
             const ros::Time& timestamp = entry.first;
             const std::vector<double>& values = entry.second;
 
-            if (values.size() == 5) {
+            if (values.size() == 4) {
                 file_ << toCSVString(timestamp) << ","
                     << values[0] << ","
                     << values[1] << ","
                     << values[2] << ","
-                    << values[3] << ","
-                    << values[4] << "\n";
+                    << values[3] << "\n";
             } else {
                 std::cerr << "Unexpected vector size for timestamp " << toCSVString(timestamp) << std::endl;
             }
         }
+        std::cout << "Write the file"<<std::endl;
 
         file_.flush();
         error_dynamics_.clear();
     }
     
+
+    Matrix2d gate_unit(const Vector2d& x) {
+        Matrix2d gate_value = Matrix2d::Zero();
+        gate_value(0, 0) = 1.0 / (1.0 + exp(-x(0)));
+        gate_value(1, 1) = 1.0 / (1.0 + exp(-x(1)));
+        return gate_value;
+    }
+
+
+    std::vector<double> membership(const Vector2d& x, const Vector2d& u) {
+        Matrix2d gate_z = gate_unit(W_zh * x + W_zx * u + B_z);
+        std::vector<double> mu_1 = { 1.0 - gate_z(0, 0), gate_z(0, 0) };
+        std::vector<double> mu_2 = { 1.0 - gate_z(1, 1), gate_z(1, 1) };
+
+        std::vector<double> phi(4);
+        int Z_idx = 0;
+        for (int i = 0; i < 2; ++i) {
+            for (int j = 0; j < 2; ++j) {
+                int z1 = (i == 0) ? 0 : 1;
+                int z2 = (j == 0) ? 0 : 1;
+                phi[Z_idx++] = mu_1[z1] * mu_2[z2];
+            }
+        }
+        return phi;
+    }
+
 private:
     ros::Subscriber pose_sub_;
     ros::Subscriber goal_sub_;
@@ -730,8 +774,13 @@ private:
     int log_number = 0;
     std::map<ros::Time, std::vector<double>> error_dynamics_;
 
-    Eigen::Matrix<double, 2,3> K_;
+    Eigen::Matrix2d K_;
     std::ofstream file_;
+
+    Eigen::Matrix2d W_zh, W_zx, W_rh, W_rx;
+    Eigen::Vector2d  B_z, B_r;
+    std::vector<Matrix2d> K;
+
 };
 
 int main(int argc, char** argv) {
