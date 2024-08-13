@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<launch>
+    <arg name="port" default="/dev/ttyACM0"/>
+    <arg name="start_seq" default="43605"/> <!-- 0xAA55 in decimal -->
+    <arg name="publish_hz" default="200.0"/>
+
+    <node name="base_board_node" pkg="base_board" type="node" output="screen">
+        <param name="port" value="$(arg port)"/>
+        <param name="start_seq" value="$(arg start_seq)"/>
+        <param name="publish_hz" value="$(arg publish_hz)"/>
+    </node>
+</launch>
