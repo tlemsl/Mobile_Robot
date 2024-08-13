@@ -1,12 +1,12 @@
 <launch>
 
-    <arg name="logfile_path" default="/run/user/1000/gvfs/smb-share:server=129.254.233.221,share=smartmobile/98_개인폴더/진용식/rosbag/0805_data/" />
+    <arg name="logfile_path" default="/run/user/1000/gvfs/smb-share:server=129.254.233.221,share=smartmobile/98_개인폴더/진용식/rosbag/0806_data/s_curve_data.csv" />
 
     <!-- Mode parameters -->
     <arg name="use_sim" default="true" />
     <arg name="robot_name" default="jackal" />
 
-    <arg name="path_tracking" default="false" />
+    <arg name="path_tracking" default="true" />
     <arg name="path_tracking_mode" default="1" />
 
     <!-- MPC parameters -->
@@ -14,8 +14,8 @@
     <arg name="N" default="20" />
     <arg name="xy_cost" default="10" />
     <arg name="yaw_cost" default="5" />
-    <arg name="v_cost" default="1" />
-    <arg name="omega_cost" default="5" />
+    <arg name="v_cost" default="0.1" />
+    <arg name="omega_cost" default="0.5" />
     <!-- <arg name="x_min" default="[-100, -100, -3.14159]" />
     <arg name="x_max" default="[100, 100, 3.14159]" /> -->
     <arg name="v_min" default="-1" />

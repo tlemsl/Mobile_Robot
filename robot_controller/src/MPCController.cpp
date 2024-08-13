@@ -120,7 +120,7 @@ public:
         pnh.param("goal_dist_th", goal_dist_th_, 0.2);
         pnh.param("update_dist_th", update_dist_th_, 0.1);
 
-        std::string full_filename = logfile_path_ + "data2" + ".csv";
+        std::string full_filename = logfile_path_;
         file_ = std::ofstream(full_filename);
 
         if (!file_.is_open()) {
@@ -129,8 +129,7 @@ public:
         }
         // Write header
         file_ << "timestamp,distace,dtheta,v,w\n";
-        K_ << 0.2546, -0.5440,
-              -1.2602, -8.0162;
+        K_ <<   -9.4443, -2.9888, 12.4701, 1.4966;
 
         // Weight of gate units
         W_zh << -0.0512, -0.1653, -0.3561, -0.2491;
@@ -578,6 +577,9 @@ public:
 
     void publishVelocity(double linear, double angular, double distance = 0, double dtheta = 0) {
         Eigen::Vector2d error, u;
+        Eigen::Matrix2d Au;
+        Au <<  -0.0498, 0.2664, -0.0852, 0.2028;
+
         error(0) = distance;
         error(1) = dtheta;
 
@@ -587,13 +589,13 @@ public:
             Gain += phi[k] * K[k];
         }
 
-        Eigen::Vector2d auxilary_input = Gain*error;
+        Eigen::Vector2d auxilary_input =(Au*K_*error).array().tanh();
 
         geometry_msgs::Twist twist;
-        twist.linear.x = auxilary_input[0];
-        twist.angular.z = auxilary_input[1];
-        // twist.linear.x = linear;
-        // twist.angular.z = angular;
+        // twist.linear.x =  auxilary_input[0];
+        // twist.angular.z = auxilary_input[1];
+        twist.linear.x = linear + auxilary_input[0];
+        twist.angular.z = angular + auxilary_input[1];
 
 
         twist.linear.x = std::min(v_max_, std::max(v_min_, twist.linear.x));
