@@ -118,7 +118,7 @@ public:
         pnh.param("goal_dist_th", goal_dist_th_, 0.2);
         pnh.param("update_dist_th", update_dist_th_, 0.1);
 
-        std::string full_filename = logfile_path_ + "data" + ".csv";
+        std::string full_filename = logfile_path_;
         file_ = std::ofstream(full_filename);
 
         if (!file_.is_open()) {
@@ -127,9 +127,8 @@ public:
         }
         // Write header
         file_ << "timestamp,dx,dy,dtheta,v,w\n";
-        K_ << 0.2546, -0.5440,
-              -1.2602, -8.0162,
-              0,0;
+        K_ << -0.8449, -5.5592, -1.1263,
+                7.5780,-34.8364, -11.3714;
         ros::waitForShutdown();
     }
 
@@ -569,10 +568,10 @@ public:
         Eigen::Vector2d auxilary_input = K_*error;
 
         geometry_msgs::Twist twist;
-        // twist.linear.x = auxilary_input[0];
-        // twist.angular.z = auxilary_input[1];
-        twist.linear.x = linear;
-        twist.angular.z = angular;
+        twist.linear.x = auxilary_input[0];
+        twist.angular.z = auxilary_input[1];
+        twist.linear.x = linear + auxilary_input[0];;
+        twist.angular.z = angular + auxilary_input[1];
 
 
         twist.linear.x = std::min(v_max_, std::max(v_min_, twist.linear.x));
@@ -668,9 +667,6 @@ public:
     }
 
     void writeCSV() {
-        
-
-
 
         for (const auto& entry : error_dynamics_) {
             const ros::Time& timestamp = entry.first;

@@ -1,6 +1,6 @@
 <launch>
 
-    <arg name="logfile_path" default="/run/user/1000/gvfs/smb-share:server=129.254.233.221,share=smartmobile/98_개인폴더/진용식/rosbag/0731_data/s_path_tracking/" />
+    <arg name="logfile_path" default="/run/user/1000/gvfs/smb-share:server=129.254.233.221,share=smartmobile/98_개인폴더/진용식/data/3Ddata.csv" />
 
     <!-- Mode parameters -->
     <arg name="use_sim" default="true" />
