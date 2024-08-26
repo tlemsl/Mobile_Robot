@@ -2,7 +2,10 @@
 #define BASE_BOARD_NODE_H
 
 #include <ros/ros.h>
-#include <std_msgs/Int32MultiArray.h>
+
+#include <geometry_msgs/Twist.h>
+#include <geometry_msgs/TwistStamped.h>
+
 #include "BaseBoardHandler.h"
 #include <thread>
 
@@ -20,7 +23,9 @@ private:
 
     double publish_hz;
 
-    void cmdCallback(const std_msgs::Int32MultiArray::ConstPtr& msg);
+    int accel_ref, steer_ref;
+    
+    void cmdCallback(const geometry_msgs::TwistStamped::ConstPtr& msg);
     void publishBaseInfo();
 };
 

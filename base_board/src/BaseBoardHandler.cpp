@@ -70,9 +70,9 @@ void BaseBoardHandler::stop() {
     if (receive_thread.joinable()) receive_thread.join();
 }
 
-void BaseBoardHandler::sendPacket(uint32_t data1, uint32_t data2) {
+void BaseBoardHandler::sendPacket(int accel, int steer) {
     uint8_t packet[PACKET_SIZE];
-    uint64_t combined_data = ((uint64_t)data1 << 32) | data2;
+    uint64_t combined_data = ((uint64_t)(accel + 1000) << 32) | (steer + 1000);
 
     packet[0] = (start_seq >> 8) & 0xFF;
     packet[1] = start_seq & 0xFF;
@@ -103,11 +103,12 @@ void BaseBoardHandler::process_received_data() {
                 uint64_t received_data;
                 memcpy(&received_data, data, sizeof(received_data));
 
-                uint32_t received_data1 = (received_data >> 32) & 0xFFFFFFFF;
-                uint32_t received_data2 = received_data & 0xFFFFFFFF;
-
-                std::cout << "Received data1: " << std::hex << received_data1 << std::endl;
-                std::cout << "Received data2: " << std::hex << received_data2 << std::endl;
+                int received_data1 = ((received_data >> 32) & 0xFFFFFFFF) - 1000;
+                int received_data2 = (received_data & 0xFFFFFFFF) - 1000;
+                
+                // Debugging
+                // std::cout << "Received data1: " << received_data1 << std::endl;
+                // std::cout << "Received data2: " << received_data2 << std::endl;
 
                 actual_accel = received_data1;
                 actual_steer = received_data2;

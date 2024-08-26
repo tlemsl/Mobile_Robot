@@ -13,9 +13,9 @@ public:
     ~BaseBoardHandler();
     void start();
     void stop();
-    void sendPacket(uint32_t data1, uint32_t data2);
-    uint32_t getActualAccel() {return actual_accel;};
-    uint32_t getActualSteer() {return actual_steer;};
+    void sendPacket(int accel, int steer);
+    int getActualAccel() {return actual_accel;};
+    int getActualSteer() {return actual_steer;};
 
 private:
     int fd;
@@ -28,8 +28,8 @@ private:
     std::thread receive_thread;
     uint32_t counter;
 
-    uint32_t actual_accel;
-    uint32_t actual_steer;
+    int actual_accel;
+    int actual_steer;
 
     void process_received_data();
     void send_loop();
