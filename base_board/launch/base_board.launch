@@ -4,9 +4,31 @@
     <arg name="start_seq" default="43605"/> <!-- 0xAA55 in decimal -->
     <arg name="publish_hz" default="200.0"/>
 
+    <arg name="cmd_mode" default="1"/>
+
+    <arg name="A_actual_to_cmd_accel" default="10.7987" />
+    <arg name="b_actual_to_cmd_accel" default="38.8791" />
+    <arg name="A_cmd_to_actual_accel" default="0.0925" />
+    <arg name="b_cmd_to_actual_accel" default="-3.5954" />
+    <arg name="A_actual_to_cmd_steer" default="-1229.7202" />
+    <arg name="b_actual_to_cmd_steer" default="-9.6785" />
+    <arg name="A_cmd_to_actual_steer" default="-0.0008106807517642265" />
+    <arg name="b_cmd_to_actual_steer" default="-0.007870494615355378" />
+
     <node name="base_board_node" pkg="base_board" type="node" output="screen">
         <param name="port" value="$(arg port)"/>
         <param name="start_seq" value="$(arg start_seq)"/>
         <param name="publish_hz" value="$(arg publish_hz)"/>
+
+        <param name="cmd_mode" value="$(arg cmd_mode)"/>
+
+        <param name="A_actual_to_cmd_accel" value="$(arg A_actual_to_cmd_accel)" />
+        <param name="b_actual_to_cmd_accel" value="$(arg b_actual_to_cmd_accel)" />
+        <param name="A_cmd_to_actual_accel" value="$(arg A_cmd_to_actual_accel)" />
+        <param name="b_cmd_to_actual_accel" value="$(arg b_cmd_to_actual_accel)" />
+        <param name="A_actual_to_cmd_steer" value="$(arg A_actual_to_cmd_steer)" />
+        <param name="b_actual_to_cmd_steer" value="$(arg b_actual_to_cmd_steer)" />
+        <param name="A_cmd_to_actual_steer" value="$(arg A_cmd_to_actual_steer)" />
+        <param name="b_cmd_to_actual_steer" value="$(arg b_cmd_to_actual_steer)" />
     </node>
 </launch>
