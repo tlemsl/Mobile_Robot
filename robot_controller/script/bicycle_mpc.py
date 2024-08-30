@@ -4,7 +4,7 @@ import rospy
 import math
 import casadi as ca
 import numpy as np
-from geometry_msgs.msg import PoseStamped, Twist, Point
+from geometry_msgs.msg import PoseStamped, TwistStamped, Point
 from gazebo_msgs.msg import ModelStates
 from visualization_msgs.msg import Marker
 from tf.transformations import euler_from_quaternion, quaternion_from_euler
@@ -16,13 +16,15 @@ class SimplePoseController:
         
         # Subscriber to Gazebo model states
         rospy.Subscriber("/gazebo/model_states", ModelStates, self.pose_callback)
+        rospy.Subscriber("/odom_pose", PoseStamped, self.gps_pose_callback)
+
         
         # Subscriber to the goal pose
         rospy.Subscriber("/move_base_simple/goal", PoseStamped, self.goal_callback)
         rospy.Subscriber("/goal", PoseStamped, self.goal_callback)
 
         # Publisher to the robot's velocity command
-        self.cmd_vel_pub = rospy.Publisher("/cmd_vel", Twist, queue_size=10)
+        self.cmd_vel_pub = rospy.Publisher("/base_board/cmd", TwistStamped, queue_size=10)
         
         # Publisher for the current pose
         self.current_pose_pub = rospy.Publisher("/current_pose", PoseStamped, queue_size=10)
@@ -89,6 +91,9 @@ class SimplePoseController:
             self.publish_current_pose()
         except ValueError:
             rospy.logwarn("Robot name not found in ModelStates")
+    
+    def gps_pose_callback(self, msg):
+        self.robot_pose = msg.pose
 
     def goal_callback(self, msg):
         self.goal_pose = msg
@@ -160,7 +165,7 @@ class SimplePoseController:
             opti.subject_to(state_next == state_k + self.dt * state_dot_k)
 
         # Control and state constraints
-        opti.subject_to(opti.bounded(self.x_min, X, self.x_max))
+        # opti.subject_to(opti.bounded(self.x_min, X, self.x_max))
         opti.subject_to(opti.bounded(self.v_min, U[0, :], self.v_max))
         opti.subject_to(opti.bounded(self.delta_min, U[1, :], self.delta_max))
 
@@ -188,9 +193,9 @@ class SimplePoseController:
         return u_opt, X_pred
 
     def publish_velocity(self, linear_velocity, steering_angle):
-        twist = Twist()
-        twist.linear.x = linear_velocity
-        twist.angular.z = steering_angle
+        twist = TwistStamped()
+        twist.twist.linear.x = linear_velocity
+        twist.twist.angular.z = steering_angle
         self.cmd_vel_pub.publish(twist)
     
     def publish_current_pose(self):
