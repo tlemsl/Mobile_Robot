@@ -4,7 +4,7 @@
     <arg name="start_seq" default="43605"/> <!-- 0xAA55 in decimal -->
     <arg name="publish_hz" default="200.0"/>
 
-    <arg name="cmd_mode" default="1"/>
+    <arg name="cmd_mode" default="0"/> <!-- 0: raw command, 1: physical command -->
 
     <arg name="A_actual_to_cmd_accel" default="10.7987" />
     <arg name="b_actual_to_cmd_accel" default="38.8791" />
