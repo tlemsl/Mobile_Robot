@@ -3,8 +3,7 @@
 
 #include <ros/ros.h>
 
-#include <geometry_msgs/Twist.h>
-#include <geometry_msgs/TwistStamped.h>
+#include <ackermann_msgs/AckermannDriveStamped.h>
 
 #include "BaseBoardHandler.h"
 #include <thread>
@@ -33,7 +32,7 @@ private:
     double A_cmd_to_actual_steer, b_cmd_to_actual_steer;
 
     
-    void cmdCallback(const geometry_msgs::TwistStamped::ConstPtr& msg);
+    void cmdCallback(const ackermann_msgs::AckermannDriveStamped::ConstPtr& msg);
     void publishBaseInfo();
 };
 

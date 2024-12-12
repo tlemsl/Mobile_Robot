@@ -27,9 +27,9 @@ BaseBoardNode::BaseBoardNode(ros::NodeHandle* nh){
 
 
     phandler_ = new BaseBoardHandler(port, static_cast<uint16_t>(start_seq), publish_hz);
-    cmd_sub_ = nh_->subscribe<geometry_msgs::TwistStamped>("/base_board/cmd", 1, &BaseBoardNode::cmdCallback, this);
-    controller_cmd_pub_ = nh_->advertise<geometry_msgs::TwistStamped>("/base_board/controller_cmd", 1);
-    controller_raw_cmd_pub_ = nh_->advertise<geometry_msgs::TwistStamped>("/base_board/controller_raw_cmd", 1);
+    cmd_sub_ = nh_->subscribe<ackermann_msgs::AckermannDriveStamped>("/base_board/cmd", 1, &BaseBoardNode::cmdCallback, this);
+    controller_cmd_pub_ = nh_->advertise<ackermann_msgs::AckermannDriveStamped>("/base_board/controller_cmd", 1);
+    controller_raw_cmd_pub_ = nh_->advertise<ackermann_msgs::AckermannDriveStamped>("/base_board/controller_raw_cmd", 1);
 
     info_thread =  std::thread(&BaseBoardNode::publishBaseInfo, this);
 
@@ -40,29 +40,29 @@ BaseBoardNode::~BaseBoardNode() {
     phandler_->stop();
 }
 
-void BaseBoardNode::cmdCallback(const geometry_msgs::TwistStamped::ConstPtr& msg) {
-    int accel_cmd = msg->twist.linear.x;
-    int steering_cmd = msg->twist.angular.z;
+void BaseBoardNode::cmdCallback(const ackermann_msgs::AckermannDriveStamped::ConstPtr& msg) {
+    int velocity_cmd = msg->drive.speed;
+    int steering_cmd = msg->drive.steering_angle;
     
     if(cmd_mode_) {
-        accel_cmd = A_actual_to_cmd_accel*accel_cmd + b_actual_to_cmd_accel;
+        velocity_cmd = A_actual_to_cmd_accel*velocity_cmd + b_actual_to_cmd_accel;
         steering_cmd = A_actual_to_cmd_steer*steering_cmd + b_actual_to_cmd_steer;
     }
-    phandler_->sendPacket(accel_cmd, steering_cmd);
+    phandler_->sendPacket(velocity_cmd, steering_cmd);
 }
 
 void BaseBoardNode::publishBaseInfo() {
-    geometry_msgs::TwistStamped raw_response, response;
+    ackermann_msgs::AckermannDriveStamped raw_response, response;
     ros::Rate r(publish_hz);
     while(ros::ok()) {
         response.header.stamp = ros::Time::now();
         raw_response.header = raw_response.header;
 
-        response.twist.linear.x = A_cmd_to_actual_accel * phandler_->getActualAccel() + b_cmd_to_actual_accel;
-        response.twist.angular.z = A_cmd_to_actual_steer * phandler_->getActualSteer() + b_cmd_to_actual_steer;
+        response.drive.speed = A_cmd_to_actual_accel * phandler_->getActualAccel() + b_cmd_to_actual_accel;
+        response.drive.steering_angle = A_cmd_to_actual_steer * phandler_->getActualSteer() + b_cmd_to_actual_steer;
         
-        raw_response.twist.linear.x = phandler_->getActualAccel();
-        raw_response.twist.angular.z = phandler_->getActualSteer();
+        raw_response.drive.speed = phandler_->getActualAccel();
+        raw_response.drive.steering_angle = phandler_->getActualSteer();
         controller_cmd_pub_.publish(response);
         controller_raw_cmd_pub_.publish(raw_response);
         r.sleep();
