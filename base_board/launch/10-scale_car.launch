@@ -5,8 +5,8 @@
 
     <arg name="cmd_mode" default="true"/> <!-- false: raw command, true: physical command -->
 
-    <arg name="A_actual_to_pwm_velocity" default="10.7987" />
-    <arg name="b_actual_to_pwm_velocity" default="38.8791" />
+    <arg name="A_actual_to_pwm_accel" default="10.7987" />
+    <arg name="b_actual_to_pwm_accel" default="38.8791" />
     <arg name="A_pwm_to_velocity" default="0.0925" />
     <arg name="b_pwm_to_velocity" default="-3.5954" />
     <arg name="A_actual_to_pwm_steer" default="-1229.7202" />
@@ -21,8 +21,8 @@
 
         <param name="cmd_mode" value="$(arg cmd_mode)"/>
 
-        <param name="A_actual_to_pwm_velocity" value="$(arg A_actual_to_pwm_velocity)" />
-        <param name="b_actual_to_pwm_velocity" value="$(arg b_actual_to_pwm_velocity)" />
+        <param name="A_actual_to_pwm_accel" value="$(arg A_actual_to_pwm_accel)" />
+        <param name="b_actual_to_pwm_accel" value="$(arg b_actual_to_pwm_accel)" />
         <param name="A_pwm_to_velocity" value="$(arg A_pwm_to_velocity)" />
         <param name="b_pwm_to_velocity" value="$(arg b_pwm_to_velocity)" />
         <param name="A_actual_to_pwm_steer" value="$(arg A_actual_to_pwm_steer)" />

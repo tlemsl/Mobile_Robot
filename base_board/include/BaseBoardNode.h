@@ -26,10 +26,10 @@ private:
 
     int accel_ref, steer_ref;
 
-    double A_actual_to_cmd_accel, b_actual_to_cmd_accel;
-    double A_cmd_to_actual_accel, b_cmd_to_actual_accel;
-    double A_actual_to_cmd_steer, b_actual_to_cmd_steer;
-    double A_cmd_to_actual_steer, b_cmd_to_actual_steer;
+    double A_actual_to_pwm_velocity, b_actual_to_pwm_velocity;
+    double A_pwm_to_velocity, b_pwm_to_velocity;
+    double A_actual_to_pwm_steer, b_actual_to_pwm_steer;
+    double A_pwm_to_steer, b_pwm_to_steer;
 
     
     void cmdCallback(const ackermann_msgs::AckermannDriveStamped::ConstPtr& msg);
