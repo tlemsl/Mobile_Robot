@@ -57,12 +57,18 @@ void BaseBoardNode::publishBaseInfo() {
     while(ros::ok()) {
         response.header.stamp = ros::Time::now();
         raw_response.header = response.header;
-
-        response.drive.speed = A_pwm_to_velocity * phandler_->getActualAccel() + b_pwm_to_velocity;
-        response.drive.steering_angle = A_pwm_to_steer * phandler_->getActualSteer() + b_pwm_to_steer;
+        int pwm_velocity = phandler_->getActualAccel();
+        int pwm_steer = phandler_->getActualSteer();
+        if(pwm_velocity > -80 && pwm_velocity < 20) {
+            response.drive.speed = 0;
+        }
+        else {
+            response.drive.speed = A_pwm_to_velocity * pwm_velocity + b_pwm_to_velocity;
+        }
+        response.drive.steering_angle = A_pwm_to_steer * pwm_steer + b_pwm_to_steer;
         
-        raw_response.drive.speed = phandler_->getActualAccel();
-        raw_response.drive.steering_angle = phandler_->getActualSteer();
+        raw_response.drive.speed = pwm_velocity;
+        raw_response.drive.steering_angle = pwm_steer;
         controller_cmd_pub_.publish(response);
         controller_raw_cmd_pub_.publish(raw_response);
         r.sleep();
