@@ -6,7 +6,7 @@
     <arg name="cmd_mode" default="true"/> <!-- false: raw command, true: physical command -->
 
     <arg name="A_actual_to_pwm_velocity" default="10.7987" />
-    <arg name="b_actual_to_pwm_velocity" default="38.8791" />
+    <arg name="b_actual_to_pwm_velocity" default="18.8791" />
     <arg name="A_pwm_to_velocity" default="0.0925" />
     <arg name="b_pwm_to_velocity" default="-3.5954" />
     <arg name="A_actual_to_pwm_steer" default="-1229.7202" />

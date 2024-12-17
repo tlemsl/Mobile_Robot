@@ -41,14 +41,15 @@ BaseBoardNode::~BaseBoardNode() {
 }
 
 void BaseBoardNode::cmdCallback(const ackermann_msgs::AckermannDriveStamped::ConstPtr& msg) {
-    int velocity_cmd = msg->drive.speed;
-    int steering_cmd = msg->drive.steering_angle;
+    double velocity_cmd = msg->drive.speed;
+    double steering_cmd = msg->drive.steering_angle;
     
     if(cmd_mode_) {
         velocity_cmd = A_actual_to_pwm_velocity*velocity_cmd + b_actual_to_pwm_velocity;
         steering_cmd = A_actual_to_pwm_steer*steering_cmd + b_actual_to_pwm_steer;
     }
-    phandler_->sendPacket(velocity_cmd, steering_cmd);
+    // ROS_INFO("velocity_cmd: %f, steering_cmd: %f", velocity_cmd, steering_cmd);
+    phandler_->sendPacket(static_cast<int>(velocity_cmd), static_cast<int>(steering_cmd));
 }
 
 void BaseBoardNode::publishBaseInfo() {
