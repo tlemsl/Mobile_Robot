@@ -1,5 +1,5 @@
 <launch>
-    <arg name="transimitter_config_path" default="$(find base_board)/config/transmitter_calibration.yaml"/>
+    <arg name="transmitter_config_path" default="$(find base_board)/config/transmitter_calibration.yaml"/>
     <arg name="port" default="/dev/ttyACM0"/>
     <arg name="start_seq" default="43605"/> <!-- 0xAA55 in decimal -->
     <arg name="publish_hz" default="200.0"/>
@@ -14,7 +14,7 @@
     <arg name="b_pwm_to_steer" default="-0.007870494615355378" />
 
     <node name="base_board_node" pkg="base_board" type="node" output="screen" launch-prefix="gdb -ex run --args">
-        <param name="transimitter_config_path" value="$(arg transimitter_config_path)"/>
+        <param name="transmitter_config_path" value="$(arg transmitter_config_path)"/>
         <param name="port" value="$(arg port)"/>
         <param name="start_seq" value="$(arg start_seq)"/>
         <param name="publish_hz" value="$(arg publish_hz)"/>

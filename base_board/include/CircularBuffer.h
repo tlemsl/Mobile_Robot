@@ -1,26 +1,29 @@
-#ifndef CIRCULAR_BUFFER_H
-#define CIRCULAR_BUFFER_H
+#ifndef BASE_BOARD_INCLUDE_CIRCULAR_BUFFER_H_
+#define BASE_BOARD_INCLUDE_CIRCULAR_BUFFER_H_
 
-#include <mutex>
+// C++ system headers
+#include <cstdint>
 #include <vector>
 
 class CircularBuffer {
  public:
-  CircularBuffer(size_t size);
-  bool is_full() const;
-  bool is_empty() const;
-  size_t capacity() const;
-  size_t size() const;
-  void put(uint8_t data);
+  explicit CircularBuffer(size_t size);
+
+  // Buffer operations
+  void put(uint8_t value);
   uint8_t get();
-  uint8_t peek(size_t index) const;
+  uint8_t peek(size_t offset) const;
+
+  // Buffer state
+  size_t size() const { return size_; }
+  bool empty() const { return size_ == 0; }
+  bool full() const { return size_ == buffer_.size(); }
 
  private:
-  std::vector<uint8_t> buffer;
-  size_t head;
-  size_t tail;
-  bool full;
-  mutable std::mutex mutex;
+  std::vector<uint8_t> buffer_;
+  size_t head_ = 0;
+  size_t tail_ = 0;
+  size_t size_ = 0;
 };
 
-#endif  // CIRCULAR_BUFFER_H
+#endif  // BASE_BOARD_INCLUDE_CIRCULAR_BUFFER_H_

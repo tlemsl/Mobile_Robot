@@ -1,88 +1,83 @@
 #include "BaseBoardHandler.h"
 
+// C system headers
 #include <fcntl.h>
 #include <termios.h>
 #include <unistd.h>
-#include <yaml-cpp/yaml.h>
 
+// C++ system headers
 #include <cmath>
 #include <cstring>
 #include <iostream>
 #include <stdexcept>
 
-#define BUFFER_SIZE 1024
-#define RX_PACKET_SIZE 25
-#define TX_PACKET_SIZE 13
-uint8_t calculate_checksum(uint8_t* data, uint8_t length) {
+// Other libraries' headers
+#include <yaml-cpp/yaml.h>
+
+namespace {
+constexpr int kBufferSize = 1024;
+constexpr int kRxPacketSize = 25;
+constexpr int kTxPacketSize = 13;
+constexpr int kDefaultMotorCmd = 1500;
+constexpr int kDefaultServoCmd = 1500;
+
+uint8_t CalculateChecksum(const uint8_t* data, uint8_t length) {
   uint8_t checksum = 0;
   for (uint8_t i = 0; i < length; i++) {
     checksum ^= data[i];
   }
   return checksum;
 }
+}  // namespace
 
 BaseBoardHandler::BaseBoardHandler(const std::string& base_board_port,
                                    const uint16_t start_seq,
                                    const double publish_hz)
-    : base_board_port(base_board_port),
-      start_seq(start_seq),
-      publish_hz(publish_hz),
-      stop_flag(false),
-      counter(0),
-      rx_buffer(BUFFER_SIZE) {
-  fd = open(base_board_port.c_str(), O_RDWR | O_NOCTTY | O_SYNC);
-  if (fd < 0) {
-    throw std::runtime_error("Error opening serial port");
-  }
-
-  struct termios tty;
-  memset(&tty, 0, sizeof tty);
-  if (tcgetattr(fd, &tty) != 0) {
-    close(fd);
-    throw std::runtime_error("Error from tcgetattr");
-  }
-
-  cfsetospeed(&tty, B115200);
-  cfsetispeed(&tty, B115200);
-
-  tty.c_cflag = (tty.c_cflag & ~CSIZE) | CS8;
-  tty.c_iflag &= ~IGNBRK;
-  tty.c_lflag = 0;
-  tty.c_oflag = 0;
-  tty.c_cc[VMIN] = 1;
-  tty.c_cc[VTIME] = 10;
-
-  tty.c_cflag |= (CLOCAL | CREAD);
-  tty.c_cflag &= ~(PARENB | PARODD);
-  tty.c_cflag &= ~CSTOPB;
-  tty.c_cflag &= ~CRTSCTS;
-
-  if (tcsetattr(fd, TCSANOW, &tty) != 0) {
-    close(fd);
-    throw std::runtime_error("Error from tcsetattr");
-  }
-  motor_cmd_ = 1500;
-  servo_cmd_ = 1500;
+    : base_board_port_(base_board_port),
+      start_seq_(start_seq),
+      publish_hz_(publish_hz),
+      stop_flag_(false),
+      counter_(0),
+      rx_buffer_(kBufferSize) {
+  InitializeSerialPort();
+  motor_cmd_ = kDefaultMotorCmd;
+  servo_cmd_ = kDefaultServoCmd;
 }
-BaseBoardHandler::BaseBoardHandler(const std::string& transimitter_config_path,
+
+BaseBoardHandler::BaseBoardHandler(const std::string& transmitter_config_path,
                                    const std::string& base_board_port,
                                    const uint16_t start_seq,
                                    const double publish_hz)
-    : base_board_port(base_board_port),
-      start_seq(start_seq),
-      publish_hz(publish_hz),
-      stop_flag(false),
-      counter(0),
-      rx_buffer(BUFFER_SIZE) {
-  fd = open(base_board_port.c_str(), O_RDWR | O_NOCTTY | O_SYNC);
-  if (fd < 0) {
+    : base_board_port_(base_board_port),
+      start_seq_(start_seq),
+      publish_hz_(publish_hz),
+      stop_flag_(false),
+      counter_(0),
+      rx_buffer_(kBufferSize) {
+  InitializeSerialPort();
+  LoadTransmitterConfig(transmitter_config_path);
+  transmitter_throttle_ = transmitter_throttle_middle_;
+  transmitter_steer_ = transmitter_steer_middle_;
+  transmitter_aux_ = transmitter_aux_middle_;
+  motor_cmd_ = transmitter_throttle_middle_;
+  servo_cmd_ = transmitter_steer_middle_;
+}
+
+BaseBoardHandler::~BaseBoardHandler() {
+  Stop();
+  close(fd_);
+}
+
+void BaseBoardHandler::InitializeSerialPort() {
+  fd_ = open(base_board_port_.c_str(), O_RDWR | O_NOCTTY | O_SYNC);
+  if (fd_ < 0) {
     throw std::runtime_error("Error opening serial port");
   }
 
   struct termios tty;
   memset(&tty, 0, sizeof tty);
-  if (tcgetattr(fd, &tty) != 0) {
-    close(fd);
+  if (tcgetattr(fd_, &tty) != 0) {
+    close(fd_);
     throw std::runtime_error("Error from tcgetattr");
   }
 
@@ -101,184 +96,158 @@ BaseBoardHandler::BaseBoardHandler(const std::string& transimitter_config_path,
   tty.c_cflag &= ~CSTOPB;
   tty.c_cflag &= ~CRTSCTS;
 
-  if (tcsetattr(fd, TCSANOW, &tty) != 0) {
-    close(fd);
+  if (tcsetattr(fd_, TCSANOW, &tty) != 0) {
+    close(fd_);
     throw std::runtime_error("Error from tcsetattr");
   }
-  loadTransimitterConfig(transimitter_config_path);
-  transimitter_throttle = transimitter_throttle_middle;
-  transimitter_steer = transimitter_steer_middle;
-  transimitter_aux = transimitter_aux_middle;
-  motor_cmd_ = transimitter_throttle_middle;
-  servo_cmd_ = transimitter_steer_middle;
 }
 
-BaseBoardHandler::~BaseBoardHandler() {
-  stop();
-  close(fd);
+void BaseBoardHandler::Start() {
+  stop_flag_ = false;
+  send_thread_ = std::thread(&BaseBoardHandler::SendLoop, this);
+  receive_thread_ = std::thread(&BaseBoardHandler::ReceiveLoop, this);
 }
 
-void BaseBoardHandler::start() {
-  stop_flag = false;
-  // For debug
-  send_thread = std::thread(&BaseBoardHandler::send_loop, this);
-  receive_thread = std::thread(&BaseBoardHandler::receive_loop, this);
+void BaseBoardHandler::Stop() {
+  stop_flag_ = true;
+  if (send_thread_.joinable()) send_thread_.join();
+  if (receive_thread_.joinable()) receive_thread_.join();
 }
 
-void BaseBoardHandler::stop() {
-  stop_flag = true;
-  if (send_thread.joinable()) send_thread.join();
-  if (receive_thread.joinable()) receive_thread.join();
-}
-
-void BaseBoardHandler::sendPacket(uint32_t motor_cmd, uint32_t servo_cmd) {
-  uint8_t packet[TX_PACKET_SIZE];
+void BaseBoardHandler::SendPacket(uint32_t motor_cmd, uint32_t servo_cmd) {
+  uint8_t packet[kTxPacketSize];
   uint64_t combined_data = ((uint64_t)(motor_cmd) << 32) | (servo_cmd);
 
-  packet[0] = (start_seq >> 8) & 0xFF;
-  packet[1] = start_seq & 0xFF;
+  packet[0] = (start_seq_ >> 8) & 0xFF;
+  packet[1] = start_seq_ & 0xFF;
   packet[2] = 8;  // Length of data
 
   memcpy(&packet[3], &combined_data, sizeof(combined_data));
 
-  packet[11] = calculate_checksum(&packet[3], 8);
+  packet[11] = CalculateChecksum(&packet[3], 8);
   packet[12] = 0xEF;  // End byte
 
-  for (int i = 0; i < TX_PACKET_SIZE; i++) {
-    write(fd, &packet[i], 1);
+  for (int i = 0; i < kTxPacketSize; i++) {
+    ssize_t bytes_written = write(fd_, &packet[i], 1);
+    if (bytes_written != 1) {
+      throw std::runtime_error("Failed to write packet data");
+    }
   }
 }
 
-void BaseBoardHandler::process_received_data() {
-  while (rx_buffer.size() >= RX_PACKET_SIZE) {
-    if (rx_buffer.peek(0) == (start_seq >> 8) &&
-        rx_buffer.peek(1) == (start_seq & 0xFF) && rx_buffer.peek(2) == 8) {
+void BaseBoardHandler::ProcessReceivedData() {
+  while (rx_buffer_.size() >= kRxPacketSize) {
+    if (rx_buffer_.peek(0) == (start_seq_ >> 8) &&
+        rx_buffer_.peek(1) == (start_seq_ & 0xFF) && rx_buffer_.peek(2) == 8) {
       uint8_t data[20];
       for (int i = 0; i < 20; i++) {
-        data[i] = rx_buffer.peek(3 + i);
-        // std::cout << "Data[" << i << "]: " << data[i] << std::endl;
+        data[i] = rx_buffer_.peek(3 + i);
       }
 
-      uint8_t checksum = rx_buffer.peek(23);
-      uint8_t end_byte = rx_buffer.peek(24);
+      uint8_t checksum = rx_buffer_.peek(23);
+      uint8_t end_byte = rx_buffer_.peek(24);
 
-      if (checksum == calculate_checksum(data, 20) && end_byte == 0xEF) {
-        uint32_t received_data_accel;
-        uint32_t received_data_steer;
-        uint32_t received_data_aux;
-        uint32_t received_data_motor_cmd;
-        uint32_t received_data_servo_cmd;
+      if (checksum == CalculateChecksum(data, 20) && end_byte == 0xEF) {
+        uint32_t received_data[5];
+        memcpy(&received_data[0], data, sizeof(uint32_t));       // throttle
+        memcpy(&received_data[1], data + 4, sizeof(uint32_t));   // steer
+        memcpy(&received_data[2], data + 8, sizeof(uint32_t));   // aux
+        memcpy(&received_data[3], data + 12, sizeof(uint32_t));  // motor_cmd
+        memcpy(&received_data[4], data + 16, sizeof(uint32_t));  // servo_cmd
 
-        memcpy(&received_data_accel, data, sizeof(received_data_accel));
-        memcpy(&received_data_steer, data + 4, sizeof(received_data_steer));
-        memcpy(&received_data_aux, data + 8, sizeof(received_data_aux));
-        memcpy(&received_data_motor_cmd, data + 12,
-               sizeof(received_data_motor_cmd));
-        memcpy(&received_data_servo_cmd, data + 16,
-               sizeof(received_data_servo_cmd));
+        transmitter_throttle_ = received_data[0];
+        transmitter_steer_ = received_data[1];
+        transmitter_aux_ = received_data[2];
+        base_board_motor_cmd_ = received_data[3];
+        base_board_servo_cmd_ = received_data[4];
 
-        transimitter_throttle = received_data_accel;
-        transimitter_steer = received_data_steer;
-        base_board_motor_cmd = received_data_motor_cmd;
-        base_board_servo_cmd = received_data_servo_cmd;
-        transimitter_aux = received_data_aux;
-
-        // Debugging
-        // std::cout << "Received data1: " << received_data_accel << std::endl;
-        // std::cout << "Received data2: " << received_data_steer << std::endl;
-        // std::cout << "Received data3: " << received_data_aux << std::endl;
-        // std::cout << "Received data4: " << received_data_motor_cmd <<
-        // std::endl; std::cout << "Received data5: " << received_data_servo_cmd
-        // << std::endl; std::cout << std::endl;
-        for (int i = 0; i < RX_PACKET_SIZE; i++) {
-          rx_buffer.get();
+        for (int i = 0; i < kRxPacketSize; i++) {
+          rx_buffer_.get();
         }
       } else {
-        rx_buffer.get();
+        rx_buffer_.get();
       }
     } else {
-      rx_buffer.get();
+      rx_buffer_.get();
     }
   }
 }
 
-void BaseBoardHandler::send_loop() {
-  while (!stop_flag) {
-    AuxState aux_state = getTransimitterAux();
-    // std::cout << "aux_state: " << static_cast<int>(aux_state) << std::endl;
+void BaseBoardHandler::SendLoop() {
+  while (!stop_flag_) {
+    AuxState aux_state = GetTransmitterAux();
     switch (aux_state) {
-      case AuxState::DOWN:
-        sendPacket(transimitter_throttle, transimitter_steer);
+      case AuxState::kDown:
+      case AuxState::kMiddle:
+        SendPacket(transmitter_throttle_, transmitter_steer_);
         break;
-      case AuxState::MIDDLE:
-        sendPacket(transimitter_throttle, transimitter_steer);
-        break;
-      case AuxState::UP:
-        sendPacket(motor_cmd_, servo_cmd_);
+      case AuxState::kUp:
+        SendPacket(motor_cmd_, servo_cmd_);
         break;
     }
-    usleep(static_cast<int>(1e6 /
-                            publish_hz));  // Send data according to publish_hz
+    usleep(static_cast<int>(1e6 / publish_hz_));
   }
 }
 
-void BaseBoardHandler::receive_loop() {
-  while (!stop_flag) {
+void BaseBoardHandler::ReceiveLoop() {
+  while (!stop_flag_) {
     uint8_t byte;
-    ssize_t n = read(fd, &byte, 1);
+    ssize_t n = read(fd_, &byte, 1);
     if (n > 0) {
-      // std::cout << "Received byte: " << byte << std::endl;
-      rx_buffer.put(byte);
-      process_received_data();
+      rx_buffer_.put(byte);
+      ProcessReceivedData();
     } else if (n < 0) {
       std::cerr << "Error reading data" << std::endl;
     }
   }
 }
 
-AuxState BaseBoardHandler::getTransimitterAux() {
-  if (std::abs(static_cast<int>(transimitter_aux) -
-               static_cast<int>(transimitter_aux_middle)) < 100) {
-    return AuxState::MIDDLE;
-  } else if (std::abs(static_cast<int>(transimitter_aux) -
-                      static_cast<int>(transimitter_aux_down)) < 100) {
-    return AuxState::DOWN;
-  } else if (std::abs(static_cast<int>(transimitter_aux) -
-                      static_cast<int>(transimitter_aux_up)) < 100) {
-    return AuxState::UP;
-  } else {
-    std::cout << "Invalid aux state: " << transimitter_aux << std::endl;
-    std::cout << "Just return middle" << std::endl;
-    return AuxState::MIDDLE;
+AuxState BaseBoardHandler::GetTransmitterAux() const {
+  const int kThreshold = 100;
+
+  int aux_diff_middle = std::abs(static_cast<int>(transmitter_aux_) -
+                                 static_cast<int>(transmitter_aux_middle_));
+  int aux_diff_down = std::abs(static_cast<int>(transmitter_aux_) -
+                               static_cast<int>(transmitter_aux_down_));
+  int aux_diff_up = std::abs(static_cast<int>(transmitter_aux_) -
+                             static_cast<int>(transmitter_aux_up_));
+
+  if (aux_diff_middle < kThreshold) {
+    return AuxState::kMiddle;
+  } else if (aux_diff_down < kThreshold) {
+    return AuxState::kDown;
+  } else if (aux_diff_up < kThreshold) {
+    return AuxState::kUp;
   }
+
+  std::cerr << "Invalid aux state: " << transmitter_aux_ << std::endl;
+  return AuxState::kMiddle;  // Default to middle as fallback
 }
 
-void BaseBoardHandler::loadTransimitterConfig(const std::string& config_path) {
+void BaseBoardHandler::LoadTransmitterConfig(const std::string& config_path) {
   try {
     YAML::Node config = YAML::LoadFile(config_path);
-    transimitter_throttle_up = config["Throttle"]["up"].as<uint32_t>();
-    transimitter_throttle_middle = config["Throttle"]["idle"].as<uint32_t>();
-    transimitter_throttle_down = config["Throttle"]["down"].as<uint32_t>();
-    transimitter_steer_left = config["Steer"]["left"].as<uint32_t>();
-    transimitter_steer_middle = config["Steer"]["idle"].as<uint32_t>();
-    transimitter_steer_right = config["Steer"]["right"].as<uint32_t>();
-    transimitter_aux_up = config["Aux"]["up"].as<uint32_t>();
-    transimitter_aux_middle = config["Aux"]["idle"].as<uint32_t>();
-    transimitter_aux_down = config["Aux"]["down"].as<uint32_t>();
-    std::cout << "Transimitter config loaded successfully!" << std::endl;
-    std::cout << "file: " << config_path << std::endl;
-    std::cout << "throttle_up: " << transimitter_throttle_up << std::endl;
-    std::cout << "throttle_middle: " << transimitter_throttle_middle
+
+    // Load throttle calibration
+    transmitter_throttle_up_ = config["Throttle"]["up"].as<uint32_t>();
+    transmitter_throttle_middle_ = config["Throttle"]["idle"].as<uint32_t>();
+    transmitter_throttle_down_ = config["Throttle"]["down"].as<uint32_t>();
+
+    // Load steering calibration
+    transmitter_steer_left_ = config["Steer"]["left"].as<uint32_t>();
+    transmitter_steer_middle_ = config["Steer"]["idle"].as<uint32_t>();
+    transmitter_steer_right_ = config["Steer"]["right"].as<uint32_t>();
+
+    // Load aux calibration
+    transmitter_aux_up_ = config["Aux"]["up"].as<uint32_t>();
+    transmitter_aux_middle_ = config["Aux"]["idle"].as<uint32_t>();
+    transmitter_aux_down_ = config["Aux"]["down"].as<uint32_t>();
+
+    std::cout << "Transmitter config loaded successfully from: " << config_path
               << std::endl;
-    std::cout << "throttle_down: " << transimitter_throttle_down << std::endl;
-    std::cout << "steer_left: " << transimitter_steer_left << std::endl;
-    std::cout << "steer_middle: " << transimitter_steer_middle << std::endl;
-    std::cout << "steer_right: " << transimitter_steer_right << std::endl;
-    std::cout << "aux_up: " << transimitter_aux_up << std::endl;
-    std::cout << "aux_middle: " << transimitter_aux_middle << std::endl;
-    std::cout << "aux_down: " << transimitter_aux_down << std::endl;
   } catch (const std::exception& e) {
-    std::cerr << "Error loading transimitter config: " << e.what() << std::endl;
-    std::cerr << "file : " << config_path << std::endl;
+    std::cerr << "Error loading transmitter config from " << config_path << ": "
+              << e.what() << std::endl;
+    throw;
   }
 }
