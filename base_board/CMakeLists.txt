@@ -38,7 +38,11 @@ add_executable(node
     src/node.cpp
     src/BaseBoardNode.cpp
 )
-target_link_libraries(node ${catkin_LIBRARIES} base_board_lib)
+target_link_libraries(node
+  ${catkin_LIBRARIES}
+  base_board_lib
+  yaml-cpp
+)
 
 add_executable(transmitter_calibration
     src/TransmitterCalibration.cpp

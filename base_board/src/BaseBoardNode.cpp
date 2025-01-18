@@ -7,7 +7,9 @@ BaseBoardNode::BaseBoardNode(ros::NodeHandle* nh) {
   ros::NodeHandle pnh("~");
   std::string port;
   int start_seq;
-
+  std::string transimitter_config_path;
+  pnh.param<std::string>("transimitter_config_path", transimitter_config_path,
+                         "");
   pnh.param<std::string>("port", port, "/dev/ttyACM0");
   pnh.param<int>("start_seq", start_seq, 0xAA55);
   pnh.param<double>("publish_hz", publish_hz, 100.0);
@@ -28,14 +30,14 @@ BaseBoardNode::BaseBoardNode(ros::NodeHandle* nh) {
   pnh.param<bool>("cmd_mode", cmd_mode_, false);
 
   phandler_ =
-      new BaseBoardHandler(port, static_cast<uint16_t>(start_seq), publish_hz);
+      new BaseBoardHandler(transimitter_config_path, port,
+                           static_cast<uint16_t>(start_seq), publish_hz);
   cmd_sub_ = nh_->subscribe<ackermann_msgs::AckermannDriveStamped>(
       "/base_board/cmd", 1, &BaseBoardNode::cmdCallback, this);
   controller_cmd_pub_ = nh_->advertise<ackermann_msgs::AckermannDriveStamped>(
       "/base_board/controller_cmd", 1);
-  controller_raw_cmd_pub_ =
-      nh_->advertise<ackermann_msgs::AckermannDriveStamped>(
-          "/base_board/controller_raw_cmd", 1);
+  controller_mode_pub_ =
+      nh_->advertise<std_msgs::String>("/base_board/controller_mode", 1);
 
   info_thread = std::thread(&BaseBoardNode::publishBaseInfo, this);
   ROS_INFO("BaseBoardNode initialized with cmd_mode: %d", cmd_mode_);
@@ -49,13 +51,9 @@ void BaseBoardNode::cmdCallback(
   double velocity_cmd = msg->drive.speed;
   double steering_cmd = msg->drive.steering_angle;
 
-  if (cmd_mode_) {
-    velocity_cmd =
-        A_actual_to_pwm_velocity * velocity_cmd + b_actual_to_pwm_velocity;
-    steering_cmd = A_actual_to_pwm_steer * steering_cmd + b_actual_to_pwm_steer;
-  }
-    // ROS_INFO("velocity_cmd: %f, steering_cmd: %f", velocity_cmd, steering_cmd);
-  phandler_->sendPacket(static_cast<int>(velocity_cmd), static_cast<int>(steering_cmd));
+  ROS_INFO("velocity_cmd: %f, steering_cmd: %f", velocity_cmd, steering_cmd);
+  phandler_->sendPacket(static_cast<int>(velocity_cmd),
+                        static_cast<int>(steering_cmd));
 }
 
 void BaseBoardNode::publishBaseInfo() {
@@ -66,18 +64,26 @@ void BaseBoardNode::publishBaseInfo() {
     raw_response.header = response.header;
     int pwm_velocity = phandler_->getBaseBoardMotorCmd();
     int pwm_steer = phandler_->getBaseBoardServoCmd();
-    if (pwm_velocity > -80 && pwm_velocity < 20) {
-      response.drive.speed = 0;
-    } else {
-      response.drive.speed =
-          A_pwm_to_velocity * pwm_velocity + b_pwm_to_velocity;
-    }
-    response.drive.steering_angle = A_pwm_to_steer * pwm_steer + b_pwm_to_steer;
-
+    AuxState aux_state = phandler_->getTransimitterAux();
     raw_response.drive.speed = pwm_velocity;
     raw_response.drive.steering_angle = pwm_steer;
     controller_cmd_pub_.publish(response);
-    controller_raw_cmd_pub_.publish(raw_response);
+    std_msgs::String mode_msg;
+    switch (aux_state) {
+      case AuxState::DOWN:
+        mode_msg.data = "SKIP-THROUGH";
+        break;
+      case AuxState::MIDDLE:
+        mode_msg.data = "TRANSIMITTER VELOCITY CONTROL";
+        break;
+      case AuxState::UP:
+        mode_msg.data = "PC VELOCITY CONTROL";
+        break;
+      default:
+        mode_msg.data = "INVALID";
+        break;
+    }
+    controller_mode_pub_.publish(mode_msg);
     r.sleep();
   }
 }

@@ -42,11 +42,11 @@ int main(int argc, char** argv) {
   double throttle_deviation = 0, steer_deviation = 0, aux_deviation = 0;
 
   for (int i = 0; i < max_samples; ++i) {
-    aux_readings.push_back(handler.getTransimitterAux());
+    aux_readings.push_back(handler.getTransimitterAuxRaw());
 
     // Throttle calibration
     if (!is_throttle_stable) {
-      throttle_readings.push_back(handler.getTransimitterThrottle());
+      throttle_readings.push_back(handler.getTransimitterThrottleRaw());
       if (throttle_readings.size() >= min_samples) {
         throttle_readings.pop_front();
         throttle_avg = std::accumulate(throttle_readings.begin(),
@@ -66,7 +66,7 @@ int main(int argc, char** argv) {
     }
     // Steering calibration
     if (!is_steer_stable) {
-      steer_readings.push_back(handler.getTransimitterSteer());
+      steer_readings.push_back(handler.getTransimitterSteerRaw());
       if (steer_readings.size() >= min_samples) {
         steer_readings.pop_front();
         steer_avg =
@@ -85,7 +85,7 @@ int main(int argc, char** argv) {
     }
     // Auxiliary calibration
     if (!is_aux_stable) {
-      aux_readings.push_back(handler.getTransimitterAux());
+      aux_readings.push_back(handler.getTransimitterAuxRaw());
       if (aux_readings.size() >= min_samples) {
         aux_readings.pop_front();
         aux_avg = std::accumulate(aux_readings.begin(), aux_readings.end(), 0) /
@@ -167,7 +167,7 @@ int main(int argc, char** argv) {
   is_throttle_stable = false;
   throttle_readings.clear();
   for (int i = 0; i < max_samples; ++i) {
-    throttle_readings.push_back(handler.getTransimitterThrottle());
+    throttle_readings.push_back(handler.getTransimitterThrottleRaw());
     if (i > min_samples) {
       throttle_readings.pop_front();
       throttle_avg = std::accumulate(throttle_readings.begin(),
@@ -217,7 +217,7 @@ int main(int argc, char** argv) {
   throttle_deviation = 0;
   is_throttle_stable = false;
   for (int i = 0; i < max_samples; ++i) {
-    throttle_readings.push_back(handler.getTransimitterThrottle());
+    throttle_readings.push_back(handler.getTransimitterThrottleRaw());
     if (i > min_samples) {
       throttle_readings.pop_front();
       throttle_avg = std::accumulate(throttle_readings.begin(),
@@ -268,7 +268,7 @@ int main(int argc, char** argv) {
   steer_deviation = 0;
   is_steer_stable = false;
   for (int i = 0; i < max_samples; ++i) {
-    steer_readings.push_back(handler.getTransimitterSteer());
+    steer_readings.push_back(handler.getTransimitterSteerRaw());
     if (i > min_samples) {
       steer_readings.pop_front();
       steer_avg =
@@ -317,7 +317,7 @@ int main(int argc, char** argv) {
   steer_deviation = 0;
   is_steer_stable = false;
   for (int i = 0; i < max_samples; ++i) {
-    steer_readings.push_back(handler.getTransimitterSteer());
+    steer_readings.push_back(handler.getTransimitterSteerRaw());
     if (i > min_samples) {
       steer_readings.pop_front();
       steer_avg =
@@ -366,7 +366,7 @@ int main(int argc, char** argv) {
   aux_deviation = 0;
   is_aux_stable = false;
   for (int i = 0; i < max_samples; ++i) {
-    aux_readings.push_back(handler.getTransimitterAux());
+    aux_readings.push_back(handler.getTransimitterAuxRaw());
     if (i > min_samples) {
       aux_readings.pop_front();
       aux_avg = std::accumulate(aux_readings.begin(), aux_readings.end(), 0.0) /
@@ -413,7 +413,7 @@ int main(int argc, char** argv) {
   aux_deviation = 0;
   is_aux_stable = false;
   for (int i = 0; i < max_samples; ++i) {
-    aux_readings.push_back(handler.getTransimitterAux());
+    aux_readings.push_back(handler.getTransimitterAuxRaw());
     if (i > min_samples) {
       aux_readings.pop_front();
       aux_avg = std::accumulate(aux_readings.begin(), aux_readings.end(), 0.0) /

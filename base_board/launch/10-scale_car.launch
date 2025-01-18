@@ -1,9 +1,8 @@
 <launch>
+    <arg name="transimitter_config_path" default="$(find base_board)/config/transmitter_calibration.yaml"/>
     <arg name="port" default="/dev/ttyACM0"/>
     <arg name="start_seq" default="43605"/> <!-- 0xAA55 in decimal -->
     <arg name="publish_hz" default="200.0"/>
-
-    <arg name="cmd_mode" default="true"/> <!-- false: raw command, true: physical command -->
 
     <arg name="A_actual_to_pwm_velocity" default="10.7987" />
     <arg name="b_actual_to_pwm_velocity" default="18.8791" />
@@ -14,12 +13,11 @@
     <arg name="A_pwm_to_steer" default="-0.0008106807517642265" />
     <arg name="b_pwm_to_steer" default="-0.007870494615355378" />
 
-    <node name="base_board_node" pkg="base_board" type="node" output="screen">
+    <node name="base_board_node" pkg="base_board" type="node" output="screen" launch-prefix="gdb -ex run --args">
+        <param name="transimitter_config_path" value="$(arg transimitter_config_path)"/>
         <param name="port" value="$(arg port)"/>
         <param name="start_seq" value="$(arg start_seq)"/>
         <param name="publish_hz" value="$(arg publish_hz)"/>
-
-        <param name="cmd_mode" value="$(arg cmd_mode)"/>
 
         <param name="A_actual_to_pwm_velocity" value="$(arg A_actual_to_pwm_velocity)" />
         <param name="b_actual_to_pwm_velocity" value="$(arg b_actual_to_pwm_velocity)" />

@@ -1,6 +1,6 @@
 Throttle:
-  down: 1120
-  up: 1931
+  up: 1120
+  down: 1931
   idle: 1536
 Steer:
   left: 1120

@@ -2,6 +2,7 @@
 #define BASE_BOARD_NODE_H
 
 #include <ackermann_msgs/AckermannDriveStamped.h>
+#include <std_msgs/String.h>
 #include <ros/ros.h>
 
 #include <thread>
@@ -16,7 +17,7 @@ class BaseBoardNode {
  private:
   ros::NodeHandle* nh_;
   ros::Subscriber cmd_sub_;
-  ros::Publisher controller_cmd_pub_, controller_raw_cmd_pub_;
+  ros::Publisher controller_cmd_pub_, controller_mode_pub_;
   BaseBoardHandler* phandler_;
   std::thread info_thread;
 
