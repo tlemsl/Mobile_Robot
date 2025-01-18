@@ -58,8 +58,8 @@ void BaseBoardNode::publishBaseInfo() {
     while(ros::ok()) {
         response.header.stamp = ros::Time::now();
         raw_response.header = response.header;
-        int pwm_velocity = phandler_->getActualAccel();
-        int pwm_steer = phandler_->getActualSteer();
+        int pwm_velocity = phandler_->getBaseBoardMotorCmd();
+        int pwm_steer = phandler_->getBaseBoardServoCmd();
         if(pwm_velocity > -80 && pwm_velocity < 20) {
             response.drive.speed = 0;
         }

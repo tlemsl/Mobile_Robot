@@ -23,19 +23,27 @@ catkin_package(
   LIBRARIES base_board
   CATKIN_DEPENDS roscpp std_msgs
 )
+find_package(yaml-cpp REQUIRED)
 
 include_directories(
   include
   ${catkin_INCLUDE_DIRS}
 )
+add_library(base_board_lib 
+    src/BaseBoardHandler.cpp
+    src/CircularBuffer.cpp
+)
 
 add_executable(node
     src/node.cpp
     src/BaseBoardNode.cpp
-    src/BaseBoardHandler.cpp
-    src/CircularBuffer.cpp
 )
-target_link_libraries(node ${catkin_LIBRARIES})
+target_link_libraries(node ${catkin_LIBRARIES} base_board_lib)
+
+add_executable(transmitter_calibration
+    src/TransmitterCalibration.cpp
+)
+target_link_libraries(transmitter_calibration base_board_lib yaml-cpp)
 
 install(DIRECTORY
   launch

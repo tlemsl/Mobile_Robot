@@ -7,8 +7,8 @@
 #include <stdexcept>
 
 #define BUFFER_SIZE 1024
-#define PACKET_SIZE 13
-
+#define RX_PACKET_SIZE 25
+#define TX_PACKET_SIZE 13
 uint8_t calculate_checksum(uint8_t* data, uint8_t length) {
     uint8_t checksum = 0;
     for (uint8_t i = 0; i < length; i++) {
@@ -71,7 +71,7 @@ void BaseBoardHandler::stop() {
 }
 
 void BaseBoardHandler::sendPacket(int accel, int steer) {
-    uint8_t packet[PACKET_SIZE];
+    uint8_t packet[TX_PACKET_SIZE];
     uint64_t combined_data = ((uint64_t)(accel + 1000) << 32) | (steer + 1000);
 
     packet[0] = (start_seq >> 8) & 0xFF;
@@ -83,37 +83,51 @@ void BaseBoardHandler::sendPacket(int accel, int steer) {
     packet[11] = calculate_checksum(&packet[3], 8);
     packet[12] = 0xEF;  // End byte
 
-    for (int i = 0; i < PACKET_SIZE; i++) {
+    for (int i = 0; i < TX_PACKET_SIZE; i++) {
         write(fd, &packet[i], 1);
     }
 }
 
 void BaseBoardHandler::process_received_data() {
-    while (rx_buffer.size() >= PACKET_SIZE) {
+    while (rx_buffer.size() >= RX_PACKET_SIZE) {
         if (rx_buffer.peek(0) == (start_seq >> 8) && rx_buffer.peek(1) == (start_seq & 0xFF) && rx_buffer.peek(2) == 8) {
-            uint8_t data[8];
-            for (int i = 0; i < 8; i++) {
+            uint8_t data[20];
+            for (int i = 0; i < 20; i++) {
                 data[i] = rx_buffer.peek(3 + i);
+                // std::cout << "Data[" << i << "]: " << data[i] << std::endl;
             }
 
-            uint8_t checksum = rx_buffer.peek(11);
-            uint8_t end_byte = rx_buffer.peek(12);
+            uint8_t checksum = rx_buffer.peek(23);
+            uint8_t end_byte = rx_buffer.peek(24);
 
-            if (checksum == calculate_checksum(data, 8) && end_byte == 0xEF) {
-                uint64_t received_data;
-                memcpy(&received_data, data, sizeof(received_data));
+            if (checksum == calculate_checksum(data, 20) && end_byte == 0xEF) {
+                uint32_t received_data_accel;
+                uint32_t received_data_steer;
+                uint32_t received_data_aux;
+                uint32_t received_data_motor_cmd;
+                uint32_t received_data_servo_cmd;
 
-                int received_data1 = ((received_data >> 32) & 0xFFFFFFFF) - 1000;
-                int received_data2 = (received_data & 0xFFFFFFFF) - 1000;
+                memcpy(&received_data_accel, data, sizeof(received_data_accel));
+                memcpy(&received_data_steer, data + 4, sizeof(received_data_steer));
+                memcpy(&received_data_aux, data + 8, sizeof(received_data_aux));
+                memcpy(&received_data_motor_cmd, data + 12, sizeof(received_data_motor_cmd));
+                memcpy(&received_data_servo_cmd, data + 16, sizeof(received_data_servo_cmd));
+
                 
+                transimitter_throttle = received_data_accel;
+                transimitter_steer = received_data_steer;
+                transimitter_aux = received_data_aux;
+                base_board_motor_cmd = received_data_motor_cmd;
+                base_board_servo_cmd = received_data_servo_cmd;
+
                 // Debugging
-                // std::cout << "Received data1: " << received_data1 << std::endl;
-                // std::cout << "Received data2: " << received_data2 << std::endl;
-
-                actual_accel = received_data1;
-                actual_steer = received_data2;
-
-                for (int i = 0; i < PACKET_SIZE; i++) {
+                // std::cout << "Received data1: " << received_data_accel << std::endl;
+                // std::cout << "Received data2: " << received_data_steer << std::endl;
+                // std::cout << "Received data3: " << received_data_aux << std::endl;
+                // std::cout << "Received data4: " << received_data_motor_cmd << std::endl;
+                // std::cout << "Received data5: " << received_data_servo_cmd << std::endl;
+                // std::cout << std::endl;
+                for (int i = 0; i < RX_PACKET_SIZE; i++) {
                     rx_buffer.get();
                 }
             } else {
@@ -138,6 +152,7 @@ void BaseBoardHandler::receive_loop() {
         uint8_t byte;
         ssize_t n = read(fd, &byte, 1);
         if (n > 0) {
+            // std::cout << "Received byte: " << byte << std::endl;
             rx_buffer.put(byte);
             process_received_data();
         } else if (n < 0) {

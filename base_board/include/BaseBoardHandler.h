@@ -14,8 +14,11 @@ public:
     void start();
     void stop();
     void sendPacket(int accel, int steer);
-    int getActualAccel() {return actual_accel;};
-    int getActualSteer() {return actual_steer;};
+    uint32_t getTransimitterThrottle() {return transimitter_throttle;};
+    uint32_t getTransimitterSteer() {return transimitter_steer;};
+    uint32_t getTransimitterAux() {return transimitter_aux;};
+    uint32_t getBaseBoardMotorCmd() {return base_board_motor_cmd;};
+    uint32_t getBaseBoardServoCmd() {return base_board_servo_cmd;};
 
 private:
     int fd;
@@ -28,8 +31,11 @@ private:
     std::thread receive_thread;
     uint32_t counter;
 
-    int actual_accel;
-    int actual_steer;
+    uint32_t transimitter_throttle;
+    uint32_t transimitter_steer;
+    uint32_t transimitter_aux;
+    uint32_t base_board_motor_cmd;
+    uint32_t base_board_servo_cmd;
 
     void process_received_data();
     void send_loop();
