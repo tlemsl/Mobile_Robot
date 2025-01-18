@@ -1,0 +1,12 @@
+Throttle:
+  down: 1120
+  up: 1931
+  idle: 1536
+Steer:
+  left: 1120
+  right: 1931
+  idle: 1502
+Aux:
+  down: 1932
+  up: 1120
+  idle: 1526
