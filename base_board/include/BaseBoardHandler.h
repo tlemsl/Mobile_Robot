@@ -29,6 +29,8 @@ class BaseBoardHandler {
 
   // Public methods
   void Start();
+  void StartReceiveThread();
+  void StartSendThread();
   void Stop();
   void SendPacket(uint32_t motor_cmd, uint32_t servo_cmd);
   uint32_t GetTransmitterThrottleRaw() const { return transmitter_throttle_; }
@@ -63,7 +65,8 @@ class BaseBoardHandler {
   std::string base_board_port_;
   uint16_t start_seq_;
   double publish_hz_;
-  std::atomic<bool> stop_flag_;
+  std::atomic<bool> receive_stop_flag_;
+  std::atomic<bool> send_stop_flag_;
   uint32_t counter_;
   CircularBuffer rx_buffer_;
 

@@ -36,7 +36,8 @@ BaseBoardHandler::BaseBoardHandler(const std::string& base_board_port,
     : base_board_port_(base_board_port),
       start_seq_(start_seq),
       publish_hz_(publish_hz),
-      stop_flag_(false),
+      receive_stop_flag_(false),
+      send_stop_flag_(false),
       counter_(0),
       rx_buffer_(kBufferSize) {
   InitializeSerialPort();
@@ -51,7 +52,8 @@ BaseBoardHandler::BaseBoardHandler(const std::string& transmitter_config_path,
     : base_board_port_(base_board_port),
       start_seq_(start_seq),
       publish_hz_(publish_hz),
-      stop_flag_(false),
+      receive_stop_flag_(false),
+      send_stop_flag_(false),
       counter_(0),
       rx_buffer_(kBufferSize) {
   InitializeSerialPort();
@@ -103,13 +105,23 @@ void BaseBoardHandler::InitializeSerialPort() {
 }
 
 void BaseBoardHandler::Start() {
-  stop_flag_ = false;
-  send_thread_ = std::thread(&BaseBoardHandler::SendLoop, this);
+  StartReceiveThread();
+  StartSendThread();
+}
+
+void BaseBoardHandler::StartReceiveThread() {
+  receive_stop_flag_ = false;
   receive_thread_ = std::thread(&BaseBoardHandler::ReceiveLoop, this);
 }
 
+void BaseBoardHandler::StartSendThread() {
+  send_stop_flag_ = false;
+  send_thread_ = std::thread(&BaseBoardHandler::SendLoop, this);
+}
+
 void BaseBoardHandler::Stop() {
-  stop_flag_ = true;
+  receive_stop_flag_ = true;
+  send_stop_flag_ = true;
   if (send_thread_.joinable()) send_thread_.join();
   if (receive_thread_.joinable()) receive_thread_.join();
 }
@@ -174,7 +186,7 @@ void BaseBoardHandler::ProcessReceivedData() {
 }
 
 void BaseBoardHandler::SendLoop() {
-  while (!stop_flag_) {
+  while (!send_stop_flag_) {
     AuxState aux_state = GetTransmitterAux();
     switch (aux_state) {
       case AuxState::kDown:
@@ -190,7 +202,7 @@ void BaseBoardHandler::SendLoop() {
 }
 
 void BaseBoardHandler::ReceiveLoop() {
-  while (!stop_flag_) {
+  while (!receive_stop_flag_) {
     uint8_t byte;
     ssize_t n = read(fd_, &byte, 1);
     if (n > 0) {

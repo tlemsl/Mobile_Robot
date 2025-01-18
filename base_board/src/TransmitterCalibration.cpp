@@ -71,7 +71,7 @@ bool CalibrateChannel(BaseBoardHandler* /* handler */,
 
 int main(int /* argc */, char** /* argv */) {
   BaseBoardHandler handler("/dev/ttyACM0", 0xAA55, 200);
-  handler.Start();
+  handler.StartReceiveThread();
 
   const int min_samples = static_cast<int>(kMinDuration / kTimeInterval);
   uint32_t throttle_down = kMaxUint32, throttle_up = 0, throttle_idle = 0;
