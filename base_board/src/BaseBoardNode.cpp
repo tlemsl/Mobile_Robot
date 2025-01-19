@@ -164,6 +164,16 @@ void BaseBoardNode::PIDLoop() {
     i_error_ = std::clamp(i_error_, -i_error_threshold_, i_error_threshold_);
     double pid_output =
         p_gain_ * p_error + i_gain_ * i_error_ + feedforward_velocity;
+    if (pid_output < 0 && current_velocity_ > 0.3) {
+      ROS_INFO("Braking!");
+      pid_output =
+          (p_gain_ * p_error) * 2.0 + i_gain_ * i_error_ + feedforward_velocity;
+    }
+    if (pid_output < 0 && std::abs(current_velocity_) < 0.3) {
+      ROS_INFO("Shifting to neutral");
+      handler_->SetMotorCmd(handler_->ToRawThrottle(0));
+      sleep(0.1);
+    }
     handler_->SetMotorCmd(
         handler_->ToRawThrottle(static_cast<int>(pid_output)));
     handler_->SetServoCmd(handler_->ToRawSteer(steering_cmd));
