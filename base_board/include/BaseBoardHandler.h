@@ -36,23 +36,16 @@ class BaseBoardHandler {
   uint32_t GetTransmitterThrottleRaw() const { return transmitter_throttle_; }
   uint32_t GetTransmitterSteerRaw() const { return transmitter_steer_; }
   uint32_t GetTransmitterAuxRaw() const { return transmitter_aux_; }
-  int GetTransmitterThrottle() const {
-    return transmitter_throttle_ - transmitter_throttle_middle_;
-  }
-  int GetTransmitterSteer() const {
-    return transmitter_steer_ - transmitter_steer_middle_;
-  }
-  int GetBaseBoardMotorCmd() const {
-    return base_board_motor_cmd_ - transmitter_throttle_middle_;
-  }
-  int GetBaseBoardServoCmd() const {
-    return base_board_servo_cmd_ - transmitter_steer_middle_;
-  }
+  int GetTransmitterThrottle() const;
+  int GetTransmitterSteer() const;
+  double GetTransmitterThrottleRatio() const;
+  int GetBaseBoardMotorCmd() const;
+  int GetBaseBoardServoCmd() const;
   AuxState GetTransmitterAux() const;
-
-  void SetMotorCmd(int motor_cmd) { motor_cmd_ = motor_cmd; }
-  void SetServoCmd(int servo_cmd) { servo_cmd_ = servo_cmd; }
-
+  uint32_t ToRawThrottle(int cmd) const;
+  uint32_t ToRawSteer(int cmd) const;
+  void SetMotorCmd(uint32_t motor_cmd);
+  void SetServoCmd(uint32_t servo_cmd);
  private:
   // Private methods
   void ProcessReceivedData();

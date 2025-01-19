@@ -2,6 +2,9 @@
 
 #include <stdexcept>
 
+// Other libraries' headers
+#include <std_msgs/Float64MultiArray.h>
+#include <std_msgs/String.h>
 BaseBoardNode::BaseBoardNode(ros::NodeHandle* nh) {
   nh_ = nh;
   ros::NodeHandle pnh("~");
@@ -36,26 +39,46 @@ BaseBoardNode::BaseBoardNode(ros::NodeHandle* nh) {
   pnh.param<double>("steer_pwm_to_actual_offset", steer_pwm_to_actual_offset_,
                     -0.007870494615355378);
 
-  pnh.param<bool>("cmd_mode", cmd_mode_, false);
-
+  // PID parameters
+  pnh.param<double>("p_gain", p_gain_, 15.0);
+  pnh.param<double>("i_gain", i_gain_, 1.0);
+  pnh.param<double>("d_gain", d_gain_, 0.05);
+  pnh.param<double>("i_error_threshold", i_error_threshold_, 5.0);
+  // ROS TOPICS
+  pnh.param<std::string>("cmd_topic", cmd_topic_, "/base_board/cmd");
+  pnh.param<std::string>("odom_topic", odom_topic_, "/odom");
+  pnh.param<double>("max_velocity", max_velocity_, 3.0);
   handler_ =
       new BaseBoardHandler(transmitter_config_path, port,
                            static_cast<uint16_t>(start_seq), publish_hz_);
 
   // Set up ROS communication
   cmd_sub_ = nh_->subscribe<ackermann_msgs::AckermannDriveStamped>(
-      "/base_board/cmd", 1, &BaseBoardNode::CmdCallback, this);
+      cmd_topic_, 1, &BaseBoardNode::CmdCallback, this);
+  odom_sub_ = nh_->subscribe<nav_msgs::Odometry>(
+      odom_topic_, 1, &BaseBoardNode::OdometryCallback, this);
   controller_cmd_pub_ = nh_->advertise<ackermann_msgs::AckermannDriveStamped>(
       "/base_board/controller_cmd", 1);
+  controller_raw_cmd_pub_ = nh_->advertise<ackermann_msgs::AckermannDriveStamped>(
+      "/base_board/controller_raw_cmd", 1);
   controller_mode_pub_ =
       nh_->advertise<std_msgs::String>("/base_board/controller_mode", 1);
-
+  controller_pid_status_pub_ = nh_->advertise<std_msgs::Float64MultiArray>(
+      "/base_board/controller_pid_status", 1);
+  current_velocity_ = 0.0;
+  target_velocity_ = 0.0;
+  steering_cmd_ = 0.0;
+  i_error_ = 0.0;
   info_thread_ = std::thread(&BaseBoardNode::PublishBaseInfo, this);
-  ROS_INFO("BaseBoardNode initialized with cmd_mode: %d", cmd_mode_);
+  pid_thread_ = std::thread(&BaseBoardNode::PIDLoop, this);
   handler_->Start();
 }
 
 BaseBoardNode::~BaseBoardNode() { handler_->Stop(); }
+
+void BaseBoardNode::OdometryCallback(const nav_msgs::Odometry::ConstPtr& msg) {
+  current_velocity_ = msg->twist.twist.linear.x;
+}
 
 void BaseBoardNode::CmdCallback(
     const ackermann_msgs::AckermannDriveStamped::ConstPtr& msg) {
@@ -63,10 +86,7 @@ void BaseBoardNode::CmdCallback(
   double steering_cmd = msg->drive.steering_angle;
 
   ROS_INFO("velocity_cmd: %f, steering_cmd: %f", velocity_cmd, steering_cmd);
-  handler_->SendPacket(static_cast<int>(velocity_cmd),
-                       static_cast<int>(steering_cmd));
 }
-
 void BaseBoardNode::PublishBaseInfo() {
   ackermann_msgs::AckermannDriveStamped raw_response, response;
   ros::Rate rate(publish_hz_);
@@ -81,15 +101,21 @@ void BaseBoardNode::PublishBaseInfo() {
 
     raw_response.drive.speed = pwm_velocity;
     raw_response.drive.steering_angle = pwm_steer;
+    controller_raw_cmd_pub_.publish(raw_response);
+    response.drive.speed =
+        velocity_pwm_to_actual_scale_ * pwm_velocity +
+        velocity_pwm_to_actual_offset_;
+    response.drive.steering_angle =
+        steer_pwm_to_actual_scale_ * pwm_steer + steer_pwm_to_actual_offset_;
     controller_cmd_pub_.publish(response);
 
     std_msgs::String mode_msg;
     switch (aux_state) {
       case AuxState::kDown:
-        mode_msg.data = "SKIP-THROUGH";
+        mode_msg.data = "TRANSMITTER VELOCITY CONTROL";
         break;
       case AuxState::kMiddle:
-        mode_msg.data = "TRANSMITTER VELOCITY CONTROL";
+        mode_msg.data = "DIRECT CONTROL";
         break;
       case AuxState::kUp:
         mode_msg.data = "PC VELOCITY CONTROL";
@@ -99,6 +125,63 @@ void BaseBoardNode::PublishBaseInfo() {
         break;
     }
     controller_mode_pub_.publish(mode_msg);
+    rate.sleep();
+  }
+}
+void BaseBoardNode::PIDLoop() {
+  ROS_INFO("PIDLoop started");
+  ros::Rate rate(publish_hz_);
+  double target_velocity = 0.0;
+  double last_error_ = 0.0;
+  double dt = 1.0 / publish_hz_;
+  uint32_t steering_cmd = 0;
+  std_msgs::Float64MultiArray pid_status;
+  double last_p_error = 0.0;
+  while (ros::ok()) {
+    AuxState aux_state = handler_->GetTransmitterAux();
+    if (aux_state == AuxState::kMiddle) {
+      handler_->SetMotorCmd(handler_->GetTransmitterThrottleRaw());
+      handler_->SetServoCmd(handler_->GetTransmitterSteerRaw());
+      last_p_error = 0.0;
+      i_error_ = 0.0;
+      rate.sleep();
+      continue;
+    }
+    // PC control
+    if (aux_state == AuxState::kUp) {
+      target_velocity = target_velocity_;
+      steering_cmd =
+          steer_actual_to_pwm_scale_ * steering_cmd_;
+    } else {
+      // Transmitter control
+
+      target_velocity = max_velocity_ * handler_->GetTransmitterThrottleRatio();
+      steering_cmd = handler_->GetTransmitterSteer();
+    }
+    double p_error = target_velocity - current_velocity_;
+    double d_error = (p_error - last_p_error) / dt;
+    i_error_ += p_error * dt;
+    i_error_ = std::clamp(i_error_, -i_error_threshold_, i_error_threshold_);
+    double pid_output =
+        p_gain_ * p_error + i_gain_ * i_error_ + d_gain_ * d_error;
+    last_p_error = p_error;
+    handler_->SetMotorCmd(
+        handler_->ToRawThrottle(static_cast<int>(pid_output)));
+    handler_->SetServoCmd(handler_->ToRawSteer(steering_cmd));
+    pid_status.data.clear();
+
+    pid_status.data.push_back(target_velocity);
+    pid_status.data.push_back(current_velocity_);
+    pid_status.data.push_back(p_error);
+    pid_status.data.push_back(p_gain_ * p_error);
+    pid_status.data.push_back(i_error_);
+    pid_status.data.push_back(i_gain_ * i_error_);
+    pid_status.data.push_back(d_error);
+    pid_status.data.push_back(d_gain_ * d_error);
+    pid_status.data.push_back(pid_output);
+    pid_status.data.push_back(static_cast<double>(
+        handler_->ToRawThrottle(static_cast<int>(pid_output))));
+    controller_pid_status_pub_.publish(pid_status);
     rate.sleep();
   }
 }

@@ -104,6 +104,64 @@ void BaseBoardHandler::InitializeSerialPort() {
   }
 }
 
+int BaseBoardHandler::GetTransmitterThrottle() const {
+  return static_cast<int>(transmitter_throttle_) -
+         static_cast<int>(transmitter_throttle_middle_);
+}
+
+int BaseBoardHandler::GetTransmitterSteer() const {
+  return static_cast<int>(transmitter_steer_) -
+         static_cast<int>(transmitter_steer_middle_);
+}
+
+double BaseBoardHandler::GetTransmitterThrottleRatio() const {
+  double diff = static_cast<double>(transmitter_throttle_) -
+               static_cast<double>(transmitter_throttle_middle_);
+  double range = static_cast<double>(transmitter_throttle_up_) -
+                 static_cast<double>(transmitter_throttle_down_);
+  return diff / range * 2;
+}
+
+int BaseBoardHandler::GetBaseBoardMotorCmd() const {
+  return static_cast<int>(base_board_motor_cmd_) -
+         static_cast<int>(transmitter_throttle_middle_);
+}
+
+int BaseBoardHandler::GetBaseBoardServoCmd() const {
+  return static_cast<int>(base_board_servo_cmd_) -
+         static_cast<int>(transmitter_steer_middle_);
+}
+
+uint32_t BaseBoardHandler::ToRawThrottle(int cmd) const {
+  int sign = transmitter_throttle_up_ > transmitter_throttle_down_ ? 1 : -1;
+  return static_cast<uint32_t>(cmd * sign + transmitter_throttle_middle_);
+}
+
+uint32_t BaseBoardHandler::ToRawSteer(int cmd) const {
+  int sign = transmitter_steer_right_ > transmitter_steer_left_ ? 1 : -1;
+  return static_cast<uint32_t>(cmd * sign + transmitter_steer_middle_);
+}
+
+void BaseBoardHandler::SetMotorCmd(uint32_t motor_cmd) {
+  uint32_t max = transmitter_throttle_up_ > transmitter_throttle_down_
+                     ? transmitter_throttle_up_
+                     : transmitter_throttle_down_;
+  uint32_t min = transmitter_throttle_up_ < transmitter_throttle_down_
+                     ? transmitter_throttle_up_
+                     : transmitter_throttle_down_;
+  motor_cmd_ = std::clamp(motor_cmd, min, max);
+}
+
+void BaseBoardHandler::SetServoCmd(uint32_t servo_cmd) {
+  uint32_t max = transmitter_steer_right_ > transmitter_steer_left_
+                     ? transmitter_steer_right_
+                     : transmitter_steer_left_;
+  uint32_t min = transmitter_steer_right_ < transmitter_steer_left_
+                     ? transmitter_steer_right_
+                     : transmitter_steer_left_;
+  servo_cmd_ = std::clamp(servo_cmd, min, max);
+}
+
 void BaseBoardHandler::Start() {
   StartReceiveThread();
   StartSendThread();
@@ -187,16 +245,7 @@ void BaseBoardHandler::ProcessReceivedData() {
 
 void BaseBoardHandler::SendLoop() {
   while (!send_stop_flag_) {
-    AuxState aux_state = GetTransmitterAux();
-    switch (aux_state) {
-      case AuxState::kDown:
-      case AuxState::kMiddle:
-        SendPacket(transmitter_throttle_, transmitter_steer_);
-        break;
-      case AuxState::kUp:
-        SendPacket(motor_cmd_, servo_cmd_);
-        break;
-    }
+    SendPacket(motor_cmd_, servo_cmd_);
     usleep(static_cast<int>(1e6 / publish_hz_));
   }
 }

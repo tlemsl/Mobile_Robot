@@ -1,15 +1,15 @@
 #ifndef BASE_BOARD_INCLUDE_BASE_BOARD_NODE_H_
 #define BASE_BOARD_INCLUDE_BASE_BOARD_NODE_H_
 
-#include <ros/ros.h>  // ROS core header first
-
-// C++ system headers
-#include <thread>
+// ROS core header first
+#include <ros/ros.h>
 
 // Other libraries' headers
 #include <ackermann_msgs/AckermannDriveStamped.h>
 #include <nav_msgs/Odometry.h>
-#include <std_msgs/String.h>
+
+// C++ system headers
+#include <thread>
 
 // Project headers
 #include "BaseBoardHandler.h"
@@ -24,17 +24,23 @@ class BaseBoardNode {
   void CmdCallback(const ackermann_msgs::AckermannDriveStamped::ConstPtr& msg);
   void OdometryCallback(const nav_msgs::Odometry::ConstPtr& msg);
   void PublishBaseInfo();
+  void PIDLoop();
 
   // Member variables (with trailing underscores)
   ros::NodeHandle* nh_;
+  std::string cmd_topic_, odom_topic_;
   ros::Subscriber cmd_sub_;
+  ros::Subscriber odom_sub_;
   ros::Publisher controller_cmd_pub_;
+  ros::Publisher controller_raw_cmd_pub_;
   ros::Publisher controller_mode_pub_;
+  ros::Publisher controller_pid_status_pub_;
   BaseBoardHandler* handler_;
   std::thread info_thread_;
+  std::thread pid_thread_;
 
   double publish_hz_;
-  bool cmd_mode_ = true;  // false: raw command, true: physical command
+  double current_velocity_;
   int accel_ref_;
   int steer_ref_;
 
@@ -53,6 +59,10 @@ class BaseBoardNode {
   double i_gain_;
   double d_gain_;
   double i_error_;
+  double i_error_threshold_;
+  double target_velocity_;
+  double steering_cmd_;
+  double max_velocity_;
 };
 
 #endif  // BASE_BOARD_INCLUDE_BASE_BOARD_NODE_H_

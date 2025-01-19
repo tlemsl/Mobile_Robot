@@ -16,12 +16,14 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   std_msgs
+  nav_msgs
+  ackermann_msgs
 )
 
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES base_board
-  CATKIN_DEPENDS roscpp std_msgs
+  CATKIN_DEPENDS roscpp std_msgs nav_msgs ackermann_msgs
 )
 find_package(yaml-cpp REQUIRED)
 
