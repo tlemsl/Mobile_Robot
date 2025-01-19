@@ -66,6 +66,9 @@ BaseBoardNode::BaseBoardNode(ros::NodeHandle* nh) {
       nh_->advertise<std_msgs::String>("/base_board/controller_mode", 1);
   controller_pid_status_pub_ = nh_->advertise<std_msgs::Float64MultiArray>(
       "/base_board/controller_pid_status", 1);
+  controller_target_control_pub_ =
+      nh_->advertise<ackermann_msgs::AckermannDriveStamped>(
+          "/base_board/controller_target_control", 1);
   current_velocity_ = 0.0;
   target_velocity_ = 0.0;
   steering_cmd_ = 0.0;
@@ -87,13 +90,13 @@ void BaseBoardNode::CmdCallback(
   steering_cmd_ = msg->drive.steering_angle;
 }
 void BaseBoardNode::PublishBaseInfo() {
-  ackermann_msgs::AckermannDriveStamped raw_response, response;
+  ackermann_msgs::AckermannDriveStamped raw_response, response, target_control;
   ros::Rate rate(publish_hz_);
 
   while (ros::ok()) {
     response.header.stamp = ros::Time::now();
     raw_response.header = response.header;
-
+    target_control.header = response.header;
     int pwm_velocity = handler_->GetBaseBoardMotorCmd();
     int pwm_steer = handler_->GetBaseBoardServoCmd();
     AuxState aux_state = handler_->GetTransmitterAux();
@@ -103,26 +106,34 @@ void BaseBoardNode::PublishBaseInfo() {
     controller_raw_cmd_pub_.publish(raw_response);
     response.drive.speed = velocity_pwm_to_actual_scale_ * pwm_velocity +
                            velocity_pwm_to_actual_offset_;
-    response.drive.steering_angle =
-        steer_pwm_to_actual_scale_ * pwm_steer + steer_pwm_to_actual_offset_;
+    response.drive.steering_angle = steer_pwm_to_actual_scale_ * pwm_steer;
     controller_cmd_pub_.publish(response);
 
     std_msgs::String mode_msg;
     switch (aux_state) {
       case AuxState::kDown:
         mode_msg.data = "TRANSMITTER VELOCITY CONTROL";
+        target_control.drive.speed =
+            max_velocity_ * handler_->GetTransmitterThrottleRatio();
+        target_control.drive.steering_angle =
+            steer_pwm_to_actual_scale_ * handler_->GetTransmitterSteer();
         break;
       case AuxState::kMiddle:
         mode_msg.data = "DIRECT CONTROL";
+        target_control.drive = response.drive;
         break;
       case AuxState::kUp:
         mode_msg.data = "PC VELOCITY CONTROL";
+
+        target_control.drive.speed = target_velocity_;
+        target_control.drive.steering_angle = steering_cmd_;
         break;
       default:
         mode_msg.data = "INVALID";
         break;
     }
     controller_mode_pub_.publish(mode_msg);
+    controller_target_control_pub_.publish(target_control);
     rate.sleep();
   }
 }
@@ -164,7 +175,7 @@ void BaseBoardNode::PIDLoop() {
     i_error_ = std::clamp(i_error_, -i_error_threshold_, i_error_threshold_);
     double pid_output =
         p_gain_ * p_error + i_gain_ * i_error_ + feedforward_velocity;
-    if (pid_output < 0 && current_velocity_ > 0.3) {
+    if (pid_output < 0 && current_velocity_ > 0.5) {
       ROS_INFO("Braking!");
       pid_output =
           (p_gain_ * p_error) * 3.0 + i_gain_ * i_error_ + feedforward_velocity;
@@ -172,7 +183,7 @@ void BaseBoardNode::PIDLoop() {
     // To go back
     if (pid_output < 0 && target_velocity < 0.0 &&
         handler_->GetBaseBoardMotorCmd() > 0 &&
-        std::abs(current_velocity_) < 0.3) {
+        std::abs(current_velocity_) < 0.5) {
       ROS_INFO("Shifting to neutral");
       handler_->SetMotorCmd(handler_->ToRawThrottle(0));
       while (handler_->GetBaseBoardMotorCmd() > 0) {

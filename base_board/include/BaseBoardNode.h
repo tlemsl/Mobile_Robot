@@ -35,6 +35,7 @@ class BaseBoardNode {
   ros::Publisher controller_raw_cmd_pub_;
   ros::Publisher controller_mode_pub_;
   ros::Publisher controller_pid_status_pub_;
+  ros::Publisher controller_target_control_pub_;
   BaseBoardHandler* handler_;
   std::thread info_thread_;
   std::thread pid_thread_;
