@@ -4,19 +4,22 @@
     <arg name="start_seq" default="43605"/> <!-- 0xAA55 in decimal -->
     <arg name="publish_hz" default="200.0"/>
 
-    <arg name="A_actual_to_pwm_velocity" default="10.7987" />
-    <arg name="b_actual_to_pwm_velocity" default="18.8791" />
-    <arg name="A_pwm_to_velocity" default="0.0925" />
-    <arg name="b_pwm_to_velocity" default="-3.5954" />
-    <arg name="A_actual_to_pwm_steer" default="-1229.7202" />
-    <arg name="b_actual_to_pwm_steer" default="-9.6785" />
-    <arg name="A_pwm_to_steer" default="-0.0008106807517642265" />
-    <arg name="b_pwm_to_steer" default="-0.007870494615355378" />
+    <arg name="velocity_actual_to_pwm_scale" default="10.7987" />
+    <arg name="velocity_actual_to_pwm_offset" default="8.8791" />
+    <arg name="velocity_pwm_to_actual_scale" default="0.0925" />
+    <arg name="velocity_pwm_to_actual_offset" default="-3.5954" />
+    <arg name="steer_actual_to_pwm_scale" default="-1229.7202" />
+    <arg name="steer_actual_to_pwm_offset" default="-9.6785" />
+    <arg name="steer_pwm_to_actual_scale" default="-0.0008106807517642265" />
+    <arg name="steer_pwm_to_actual_offset" default="-0.007870494615355378" />
 
-    <arg name="p_gain" default="15.0" />
+    <arg name="p_gain" default="10.0" />
     <arg name="i_gain" default="10.0" />
-    <arg name="d_gain" default="0.05" />
-    <arg name="i_error_threshold" default="5.0" />
+    <arg name="i_error_threshold" default="1.0" />
+
+    <arg name="max_velocity" default="5.0" />
+    <arg name="odom_topic" default="/odometry/filtered" />
+    <arg name="cmd_topic" default="/base_board/cmd" />
 
     <node name="base_board_node" pkg="base_board" type="node" output="screen">
         <param name="transmitter_config_path" value="$(arg transmitter_config_path)"/>
@@ -24,18 +27,20 @@
         <param name="start_seq" value="$(arg start_seq)"/>
         <param name="publish_hz" value="$(arg publish_hz)"/>
 
-        <param name="A_actual_to_pwm_velocity" value="$(arg A_actual_to_pwm_velocity)" />
-        <param name="b_actual_to_pwm_velocity" value="$(arg b_actual_to_pwm_velocity)" />
-        <param name="A_pwm_to_velocity" value="$(arg A_pwm_to_velocity)" />
-        <param name="b_pwm_to_velocity" value="$(arg b_pwm_to_velocity)" />
-        <param name="A_actual_to_pwm_steer" value="$(arg A_actual_to_pwm_steer)" />
-        <param name="b_actual_to_pwm_steer" value="$(arg b_actual_to_pwm_steer)" />
-        <param name="A_pwm_to_steer" value="$(arg A_pwm_to_steer)" />
-        <param name="b_pwm_to_steer" value="$(arg b_pwm_to_steer)" />
+        <param name="velocity_actual_to_pwm_scale" value="$(arg velocity_actual_to_pwm_scale)" />
+        <param name="velocity_actual_to_pwm_offset" value="$(arg velocity_actual_to_pwm_offset)" />
+        <param name="velocity_pwm_to_actual_scale" value="$(arg velocity_pwm_to_actual_scale)" />
+        <param name="velocity_pwm_to_actual_offset" value="$(arg velocity_pwm_to_actual_offset)" />
+        <param name="steer_actual_to_pwm_scale" value="$(arg steer_actual_to_pwm_scale)" />
+        <param name="steer_actual_to_pwm_offset" value="$(arg steer_actual_to_pwm_offset)" />
+        <param name="steer_pwm_to_actual_scale" value="$(arg steer_pwm_to_actual_scale)" />
+        <param name="steer_pwm_to_actual_offset" value="$(arg steer_pwm_to_actual_offset)" />
 
         <param name="p_gain" value="$(arg p_gain)" />
         <param name="i_gain" value="$(arg i_gain)" />
-        <param name="d_gain" value="$(arg d_gain)" />
         <param name="i_error_threshold" value="$(arg i_error_threshold)" />
+        <param name="max_velocity" value="$(arg max_velocity)" />
+        <param name="odom_topic" value="$(arg odom_topic)" />
+        <param name="cmd_topic" value="$(arg cmd_topic)" />
     </node>
 </launch>

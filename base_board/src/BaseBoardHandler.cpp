@@ -116,7 +116,7 @@ int BaseBoardHandler::GetTransmitterSteer() const {
 
 double BaseBoardHandler::GetTransmitterThrottleRatio() const {
   double diff = static_cast<double>(transmitter_throttle_) -
-               static_cast<double>(transmitter_throttle_middle_);
+                static_cast<double>(transmitter_throttle_middle_);
   double range = static_cast<double>(transmitter_throttle_up_) -
                  static_cast<double>(transmitter_throttle_down_);
   return diff / range * 2;
@@ -244,8 +244,21 @@ void BaseBoardHandler::ProcessReceivedData() {
 }
 
 void BaseBoardHandler::SendLoop() {
+  uint32_t aux_min = transmitter_aux_up_ > transmitter_aux_down_
+                         ? transmitter_aux_down_
+                         : transmitter_aux_up_;
+  uint32_t aux_max = transmitter_aux_up_ < transmitter_aux_down_
+                         ? transmitter_aux_down_
+                         : transmitter_aux_up_;
   while (!send_stop_flag_) {
-    SendPacket(motor_cmd_, servo_cmd_);
+    uint32_t aux_value = GetTransmitterAuxRaw();
+    if (aux_value >= aux_min - 100 && aux_value <= aux_max + 100) {
+      SendPacket(motor_cmd_, servo_cmd_);
+    } else {
+      std::cout << "Invalid aux value: " << aux_value << std::endl;
+      SendPacket(transmitter_throttle_middle_, transmitter_steer_middle_);
+    }
+
     usleep(static_cast<int>(1e6 / publish_hz_));
   }
 }

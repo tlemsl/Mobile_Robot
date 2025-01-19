@@ -57,7 +57,6 @@ class BaseBoardNode {
   // PID control parameters
   double p_gain_;
   double i_gain_;
-  double d_gain_;
   double i_error_;
   double i_error_threshold_;
   double target_velocity_;
