@@ -83,10 +83,8 @@ void BaseBoardNode::OdometryCallback(const nav_msgs::Odometry::ConstPtr& msg) {
 
 void BaseBoardNode::CmdCallback(
     const ackermann_msgs::AckermannDriveStamped::ConstPtr& msg) {
-  double velocity_cmd = msg->drive.speed;
-  double steering_cmd = msg->drive.steering_angle;
-
-  ROS_INFO("velocity_cmd: %f, steering_cmd: %f", velocity_cmd, steering_cmd);
+  target_velocity_ = msg->drive.speed;
+  steering_cmd_ = msg->drive.steering_angle;
 }
 void BaseBoardNode::PublishBaseInfo() {
   ackermann_msgs::AckermannDriveStamped raw_response, response;
