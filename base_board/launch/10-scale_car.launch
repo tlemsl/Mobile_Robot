@@ -2,7 +2,7 @@
     <arg name="transmitter_config_path" default="$(find base_board)/config/transmitter_calibration.yaml"/>
     <arg name="port" default="/dev/ttyACM0"/>
     <arg name="start_seq" default="43605"/> <!-- 0xAA55 in decimal -->
-    <arg name="publish_hz" default="50.0"/>
+    <arg name="publish_hz" default="100.0"/>
 
     <arg name="velocity_actual_to_pwm_scale" default="10.7987" />
     <arg name="velocity_actual_to_pwm_offset" default="8.8791" />
@@ -13,7 +13,7 @@
     <arg name="steer_pwm_to_actual_scale" default="-0.0008106807517642265" />
     <arg name="steer_pwm_to_actual_offset" default="-0.007870494615355378" />
 
-    <arg name="p_gain" default="100.0" />
+    <arg name="p_gain" default="150.0" />
     <arg name="i_gain" default="300.0" />
     <arg name="i_error_threshold" default="0.1" />
 

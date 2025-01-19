@@ -167,12 +167,19 @@ void BaseBoardNode::PIDLoop() {
     if (pid_output < 0 && current_velocity_ > 0.3) {
       ROS_INFO("Braking!");
       pid_output =
-          (p_gain_ * p_error) * 2.0 + i_gain_ * i_error_ + feedforward_velocity;
+          (p_gain_ * p_error) * 3.0 + i_gain_ * i_error_ + feedforward_velocity;
     }
-    if (pid_output < 0 && std::abs(current_velocity_) < 0.3) {
+    // To go back
+    if (pid_output < 0 && target_velocity < 0.0 &&
+        handler_->GetBaseBoardMotorCmd() > 0 &&
+        std::abs(current_velocity_) < 0.3) {
       ROS_INFO("Shifting to neutral");
       handler_->SetMotorCmd(handler_->ToRawThrottle(0));
-      sleep(0.1);
+      while (handler_->GetBaseBoardMotorCmd() > 0) {
+        sleep(0.01);
+      }
+      sleep(0.2);
+      ROS_INFO("Neutral");
     }
     handler_->SetMotorCmd(
         handler_->ToRawThrottle(static_cast<int>(pid_output)));
